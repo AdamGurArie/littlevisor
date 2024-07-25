@@ -3,6 +3,9 @@
 #include <type_traits>
 #include <concepts>
 
+#define TO_HIGHER_HALF(addr) \ 
+  addr + 0xffff800000000000;
+
 //template<typename T>
 //concept acceptable_types = std::is_same_v<T, uint8_t>  ||
 //                           std::is_same_v<T, uint16_t> ||
@@ -17,8 +20,10 @@ inline bool getbit(uint64_t val, uint8_t pos) {
   return (bool)((val & bitmask) >> pos);
 }
 
-inline uint64_t setbit(uint64_t val, uint8_t pos) {
-  return val | ((uint64_t)1 << pos);
+void setbit(uint64_t* val, uint8_t pos);
+
+inline void clearbit(uint64_t* val, uint8_t pos) {
+  *val = *val & ~((uint64_t)1 << pos);
 }
 //template<acceptable_types T>
 //T read_from_port(uint16_t port);

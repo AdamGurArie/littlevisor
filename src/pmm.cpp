@@ -2,82 +2,51 @@
 #include "limine.h"
 #include <cstdint>
 #include <math.h>
+#include "common.h"
 
 static page_frame_allocator page_frame_allocator_struct = {0};
 
-static bitmap_entry* page_frame_bitmap = 0;
+static uint8_t* page_frame_bitmap = 0;
 
 void init_pmm(struct limine_memmap_response* memmap_response) {
-  struct limine_memmap_entry** entry_list = memmap_response->entries;
-  uint32_t bitmap_size = get_needed_bitmap_size(entry_list, memmap_response->entry_count);
-  uint8_t* bitmap = 0;
-  uint32_t bitmap_index = 0;
-
-  // find a place for the bitmap
-  for(uint32_t i = 0; i < memmap_response->entry_count; i++) {
-    struct limine_memmap_entry* entry = memmap_response->entries[i];
-    if(entry->type == LIMINE_MEMMAP_USABLE) {
-      if(entry->length >= bitmap_size) {
-        page_frame_bitmap = (bitmap_entry*)entry->base;
-      }
+  uint64_t highest_address = 0;
+  for(uint32_t entry = 0; entry < memmap_response->entry_count; entry++) {
+    struct limine_memmap_entry* curr_entry = memmap_response->entries[entry];
+    if(highest_address < (curr_entry->base + curr_entry->length)) {
+      highest_address = curr_entry->base + curr_entry->length;
     }
   }
 
-  if(page_frame_bitmap == 0) {
-    //panic
-  }
-
-  // create the bitmap
-  for(uint32_t i = 0; i < memmap_response->entry_count; i++) {
-    struct limine_memmap_entry* entry = memmap_response->entries[i];
-   
-    if(entry->type == LIMINE_MEMMAP_USABLE) {
-      
-      for(uint32_t j = 0; j < entry->length / 0x1000; j++) {
-        
-        if(entry->base == (uint64_t)bitmap) {
-          uint32_t num_of_pages = bitmap_size / 0x1000;
-          
-          for(uint32_t page_idx = 0; page_idx < num_of_pages; page_idx++) {
-            page_frame_bitmap[bitmap_index].available = 0;
-            page_frame_bitmap[bitmap_index].ptr = (uint8_t*)(entry->base + j * 0x1000);
-            page_frame_bitmap[bitmap_index].size = (entry->length - j * 0x1000) > 0x1000 ? 0x1000 : entry->length - j * 0x1000;
-            bitmap_index++;
-            j++;  //might cause a problem
-          }
-
-        } else {
-          bitmap[bitmap_index] = 0;
-          bitmap_index++;
-        }
-      }
-   }
- }
-
- page_frame_allocator_struct.bitmap = bitmap;
- page_frame_allocator_struct.bitmap_size = bitmap_size;
- page_frame_allocator_struct.entry_list = memmap_response->entries;
-}
-
-uint32_t get_needed_bitmap_size(limine_memmap_entry** entry_list, uint32_t length) {
-  uint32_t needed_size = 0;
-  for(uint32_t i = 0; i < length; i++) {
-    limine_memmap_entry* entry = entry_list[i];
-    if(entry->type == LIMINE_MEMMAP_USABLE) {
-      needed_size += ceil(entry->length / 0x1000);
+  uint32_t needed_size = highest_address / 8;
+  for(uint32_t entry = 0; entry < memmap_response->entry_count; entry++) {
+    struct limine_memmap_entry* curr_entry = memmap_response->entries[entry];
+    if(curr_entry->length >= needed_size && curr_entry->type == LIMINE_MEMMAP_USABLE) {
+      page_frame_allocator_struct.bitmap = (uint8_t*)TO_HIGHER_HALF(curr_entry->base);
+      page_frame_allocator_struct.bitmap_size = needed_size;
+      page_frame_allocator_struct.entry = memmap_response;
     }
   }
 
-  return needed_size * 13;
+  for(uint32_t entry = 0; entry < memmap_response->entry_count; entry++) {
+    struct limine_memmap_entry* curr_entry = memmap_response->entries[entry];
+    if(curr_entry->type == LIMINE_MEMMAP_USABLE) {
+      for(uint32_t i = 0; i < (curr_entry->length / 0x1000); i++) {
+        uint64_t addr = curr_entry->length + 0x1000 * i;
+        uint32_t byte_idx = addr / 8;
+        uint8_t bit_idx = addr % 8;
+        setbit((uint64_t*)&page_frame_allocator_struct.bitmap[byte_idx], bit_idx);
+      }
+    }
+  }
 }
 
-uint64_t kpalloc(uint32_t size) {
+uint64_t kpalloc() {
   for(uint32_t i = 0; i < page_frame_allocator_struct.bitmap_size; i++) {
-    if(page_frame_bitmap->available == 0
-       && page_frame_bitmap->size >= size) {
-      page_frame_bitmap->available = 1;
-      return (uint64_t)page_frame_bitmap->ptr;
-      
+    for(uint8_t j = 0; j < 8; j++) {
+      if(getbit(page_frame_allocator_struct.bitmap[i], j) == 1) {
+        setbit((uint64_t*)&page_frame_allocator_struct.bitmap[i], j);
+        return (uint64_t)((i+j)*0x1000);
+      }
     }
   }
 
@@ -85,10 +54,7 @@ uint64_t kpalloc(uint32_t size) {
 }
 
 void kpfree(uint64_t page) {
-  for(uint32_t i = 0; i < page_frame_allocator_struct.bitmap_size; i++) {
-    if((uint64_t)page_frame_bitmap[i].ptr == page) {
-      page_frame_bitmap[i].available = 0;
-      return;
-    }
-  }
+  uint32_t byte_idx = (page / 0x1000) / 8;
+  uint32_t bit_idx = (page / 0x1000) % 8;
+  clearbit((uint64_t*)&page_frame_allocator_struct.bitmap[byte_idx], bit_idx);
 }

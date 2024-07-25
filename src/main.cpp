@@ -2,6 +2,8 @@
 #include "common.h"
 #include "vmx.h"
 #include <cstdint>
+#include "pmm.h"
+#include "interrupts.h"
 
 __attribute__((used, section(".requests")))
 static volatile LIMINE_BASE_REVISION(2);
@@ -25,8 +27,14 @@ void memcpy(uint8_t* dest, uint8_t* src, uint32_t size) {
   }
 }
 
-void _start(){
-  enable_vmx();
+void _start() {
+  init_pmm(memmap_req.response);
+  uint64_t vmxon_region = kpalloc();
+  //enable_vmx(vmxon_region);
+  init_idt();
+  int a = 1/0;
+  write_to_port(0xe9, a);
+  while(true);
   asm volatile("hlt");
   //uint8_t a[] = "hello";
   //while(true) {

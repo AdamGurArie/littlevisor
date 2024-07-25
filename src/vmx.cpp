@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-bool enable_vmx() {
+bool enable_vmx(uint64_t vmx_region_ptr) {
   uint32_t eax_val = 0;
   asm volatile("mov $0, %%eax" ::: "eax");
   asm volatile("cpuid");
@@ -14,8 +14,8 @@ bool enable_vmx() {
   
   uint64_t cr4_val = 0;
   asm volatile("mov %%cr4, %0" : "=r"(cr4_val));
-  cr4_val = setbit(cr4_val, 13); 
+  setbit(&cr4_val, 13); 
   asm volatile("mov %0, %%cr4" :: "r"(cr4_val));
-  asm volatile("vmxon");
+  asm volatile("vmxon %0" :: "m"(vmx_region_ptr));
   return true;
 }

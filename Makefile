@@ -59,7 +59,7 @@ $(ISO): $(OUTPUT) limine
 		-efi-boot-part --efi-boot-image --protective-msdos-label \
 		iso_root -o $(ISO)
 	./limine/limine bios-install $(ISO)
-	qemu-system-x86_64 -debugcon stdio -cdrom $(ISO) -boot d -no-reboot -no-shutdown
+	qemu-system-x86_64 -debugcon stdio -cdrom $(ISO) -boot d -no-reboot -no-shutdown 
 
 debug:
 	qemu-system-x86_64 -cdrom $(ISO) -debugcon stdio -boot d -no-reboot -no-shutdown -s -S

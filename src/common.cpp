@@ -12,6 +12,10 @@ void print_to_serial(uint8_t* text, int size) {
   }
 }
 
+void setbit(uint64_t* val, uint8_t pos) {
+  *val = *val | ((uint64_t)1 << pos);
+}
+
 //template<typename T>
 //uint8_t read_from_port_byte(uint16_t port) {
 //  uint8_t output = 0;

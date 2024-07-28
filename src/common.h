@@ -3,7 +3,7 @@
 #include <type_traits>
 #include <concepts>
 
-#define TO_HIGHER_HALF(addr) \ 
+#define TO_HIGHER_HALF(addr) \
   addr + 0xffff800000000000;
 
 //template<typename T>

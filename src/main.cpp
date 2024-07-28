@@ -29,7 +29,7 @@ void memcpy(uint8_t* dest, uint8_t* src, uint32_t size) {
 
 void _start() {
   init_pmm(memmap_req.response);
-  uint64_t vmxon_region = kpalloc();
+  //uint64_t vmxon_region = kpalloc();
   //enable_vmx(vmxon_region);
   init_idt();
   int a = 1/0;

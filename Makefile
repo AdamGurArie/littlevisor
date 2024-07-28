@@ -32,18 +32,30 @@ override INTERNALLDFLAGS :=    \
 
 
 SRC_FILES = $(shell find $(SRC_DIR) -name '*.cpp')
-OBJECT_FILES = $(patsubst $(SRC_DIR)/%, $(BUILD_DIR)/%, $(SRC_FILES:.cpp=.o))
+SRC_FILES += $(shell find $(SRC_DIR) -name '*.s')
+ASM_OBJECT_FILES = $(patsubst $(SRC_DIR)/%.s, $(BUILD_DIR)/%.o, $(filter %.s, $(SRC_FILES)))
+CPP_OBJECT_FILES = $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(filter %.cpp, $(SRC_FILES)))
+OBJECT_FILES = $(ASM_OBJECT_FILES) $(CPP_OBJECT_FILES)
+#OBJECT_FILES = $(patsubst $(SRC_DIR)/%, $(BUILD_DIR)/%, $(SRC_FILES:.cpp=.o))
+#OBJECT_FILES += $(patsubst $(SRC_DIR)/%, $(BUILD_DIR)/%, $(SRC_FILES:.asm=.o))
 
 build-iso: $(ISO)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@echo $(OBJECT_FILES)
+	@echo $(SRC_FILES)
+	@echo "Building $<"
 	@mkdir -p $(dir $@)
-	g++ $(COMPILATION_FLAGS) -c $< -o $@
+	@g++ $(COMPILATION_FLAGS) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.s
+	@mkdir -p $(dir $@)
+	nasm -felf64 -F dwarf -g -o $@ $<
 
 $(OUTPUT): $(OBJECT_FILES)
 	@mkdir -p $(BUILD_DIR)
 	@echo $(OBJECT_FILES)
-	ld $(LDFLAGS) $(INTERNALLDFLAGS) -o $(OUTPUT) $(OBJECT_FILES)
+	ld $(LDFLAGS) $(INTERNALLDFLAGS) -o $(OUTPUT) $(OBJECT_FILES) $(OBJECT_FILES_ASM)
 
 $(ISO): $(OUTPUT) limine
 	mkdir -p iso_root/boot 

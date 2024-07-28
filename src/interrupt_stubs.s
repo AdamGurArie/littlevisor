@@ -1,6 +1,7 @@
 bits 64
 
-.global _Z11general_isrv
+extern _Z11general_isrv
+global general_isr_tram
 
 %macro pushAll 0
     push rsp
@@ -40,15 +41,20 @@ bits 64
     pop rsp
 %endmacro
 
-general_isr:
+general_isr_tram:
+  push qword 0
   cld
   
   pushAll
 
+  mov rdi, rax
+
   call _Z11general_isrv
+
+  mov rsp, rax
 
   popAll
 
-  sti
+  add rsp, 8
 
   iretq

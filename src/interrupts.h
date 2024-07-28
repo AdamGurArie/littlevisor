@@ -5,9 +5,9 @@
 struct idt_entry {
   uint16_t offset_1;
   uint16_t seg_selector;
-  uint8_t ist : 2;
+  uint8_t ist : 3;
   uint8_t reserved_1 : 5;
-  uint8_t type : 3;
+  uint8_t type : 4;
   uint8_t reserved_2 : 1;
   uint8_t dpl : 2;
   uint8_t present : 1;

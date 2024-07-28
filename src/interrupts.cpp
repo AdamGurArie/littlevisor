@@ -8,11 +8,11 @@
 #define CODE32_DESC_SELECTOR 0x18
 #define DATA32_DESC_SELECTOR 0x20
 #define DATA64_DESC_SELECTOR 0x28
-#define CODE64_DESC_SELECTOR 0x30
+#define CODE64_DESC_SELECTOR 0x28
 
-extern void general_isr();
+extern "C" void general_isr_tram();
 
-static struct idt_entry idt_table[256] = {0};
+static struct idt_entry idt_table[256];
 
 void init_idtentry(uint16_t vector, uint64_t isr_addr, uint8_t dpl, uint8_t ist, uint8_t type) {
   idt_table[vector].dpl = dpl;
@@ -30,16 +30,17 @@ void init_idtentry(uint16_t vector, uint64_t isr_addr, uint8_t dpl, uint8_t ist,
 
 void loadidt() {
   struct idtr_reg idtr {
-    .limit = sizeof(idt_entry)*31,
+    .limit = sizeof(idt_entry)*256,
     .base_addr = (uint64_t)&idt_table,
   };
 
   asm __volatile__("lidt %0" :: "m"(idtr));
+  asm __volatile__("sti");
 }
 
 void init_idt() {
-  for(int i = 0; i < 32; i++) {
-    init_idtentry(i, (uint64_t)general_isr, 0, 0, 0x8F);
+  for(int i = 0; i < 256; i++) {
+    init_idtentry(i, (uint64_t)general_isr_tram, 0, 0, 0xF);
   }
 
   loadidt();

@@ -4,9 +4,9 @@
 #include <math.h>
 #include "common.h"
 
-static page_frame_allocator page_frame_allocator_struct = {0};
+static page_frame_allocator page_frame_allocator_struct;
 
-static uint8_t* page_frame_bitmap = 0;
+//static uint8_t* page_frame_bitmap = 0;
 
 void init_pmm(struct limine_memmap_response* memmap_response) {
   uint64_t highest_address = 0;

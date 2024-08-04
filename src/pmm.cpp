@@ -53,6 +53,29 @@ uint64_t kpalloc() {
   return 0;
 }
 
+uint64_t kpalloc_contignious(uint32_t count) {
+  for(uint32_t i = 0; i < page_frame_allocator_struct.bitmap_size; i++) {
+    for(uint8_t j = 0; j < 8; j++) {
+      if(getbit(page_frame_allocator_struct.bitmap[i], j) == 1) {
+        uint32_t z = 1;
+        for(z = 1; z < count; z++) {
+          if(getbit(page_frame_allocator_struct.bitmap[i], j+z) == 0) {
+            break;
+          } else {
+            continue;
+          }
+        }
+
+        if(z == count) {
+          return (uint64_t)((i+j)*0x1000);
+        }
+      }
+    }
+  }
+
+  return 0;
+}
+
 void kpfree(uint64_t page) {
   uint32_t byte_idx = (page / 0x1000) / 8;
   uint32_t bit_idx = (page / 0x1000) % 8;

@@ -16,6 +16,27 @@ void setbit(uint64_t* val, uint8_t pos) {
   *val = *val | ((uint64_t)1 << pos);
 }
 
+void kmemcpy(uint8_t* dest, uint8_t* src, uint32_t size) {
+  for(uint32_t i = 0; i < size; i++) {
+    dest[i] = src[i];
+  }
+}
+
+void kmemset(uint8_t* mem, uint8_t val, uint32_t size) {
+  for(uint32_t i = 0; i < size; i++) {
+    mem[i] = val;
+  }
+}
+
+uint8_t kmemcmp(uint8_t* mem1, uint8_t* mem2, uint32_t size) {
+  for(uint32_t i = 0; i < size; i++) {
+    if(mem1[i] != mem2[i]) {
+      return 0;
+    }
+  }
+
+  return 1;
+}
 //template<typename T>
 //uint8_t read_from_port_byte(uint16_t port) {
 //  uint8_t output = 0;

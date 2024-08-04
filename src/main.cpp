@@ -1,6 +1,6 @@
 #include  "limine.h"
 #include "common.h"
-#include "vmx.h"
+#include "vmcs/vmcs.h"
 #include <cstdint>
 #include "pmm.h"
 #include "interrupts.h"
@@ -32,10 +32,11 @@ void _start() {
   //uint64_t vmxon_region = kpalloc();
   //enable_vmx(vmxon_region);
   init_idt();
-  int a = 1/0;
-  write_to_port(0xe9, a);
+  init_vm();
+  uint32_t size = sizeof(vmcb_control);
+  (void)size;
+  //write_to_port(0xe9, a);
   while(true);
-  asm volatile("hlt");
   //uint8_t a[] = "hello";
   //while(true) {
   

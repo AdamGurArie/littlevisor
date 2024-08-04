@@ -7,8 +7,8 @@
 #define DATA16_DESC_SELECTOR 0x10
 #define CODE32_DESC_SELECTOR 0x18
 #define DATA32_DESC_SELECTOR 0x20
-#define DATA64_DESC_SELECTOR 0x28
 #define CODE64_DESC_SELECTOR 0x28
+#define DATA64_DESC_SELECTOR 0x30
 
 extern "C" void general_isr_tram();
 
@@ -30,7 +30,7 @@ void init_idtentry(uint16_t vector, uint64_t isr_addr, uint8_t dpl, uint8_t ist,
 
 void loadidt() {
   struct idtr_reg idtr {
-    .limit = sizeof(idt_entry)*256,
+    .limit = sizeof(idt_entry)*31,
     .base_addr = (uint64_t)&idt_table,
   };
 
@@ -39,7 +39,7 @@ void loadidt() {
 }
 
 void init_idt() {
-  for(int i = 0; i < 256; i++) {
+  for(int i = 0; i < 32; i++) {
     init_idtentry(i, (uint64_t)general_isr_tram, 0, 0, 0xF);
   }
 
@@ -49,4 +49,13 @@ void init_idt() {
 void general_isr() {
   write_to_port(0xe9, (uint8_t)'r');
   while(true);
+}
+
+void page_fault_handler(Stack* stack) {
+  // read cr2
+  uint64_t fault_address = 0;
+  asm volatile("mov %0, %%cr2" : "=r"(fault_address));
+  if(fault_address > 0x1F7 && fault_address < (0x1FE)) {
+    //ide
+  }
 }

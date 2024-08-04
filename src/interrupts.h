@@ -2,6 +2,8 @@
 #include <cstdint>
 #include <stdint.h>
 
+#include "common.h"
+
 struct idt_entry {
   uint16_t offset_1;
   uint16_t seg_selector;
@@ -27,4 +29,4 @@ void loadidt();
 
 void init_idt();
 
-
+void page_fault_handler(Stack* stack);

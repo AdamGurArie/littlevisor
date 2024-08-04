@@ -1,6 +1,7 @@
 bits 64
 
 extern _Z11general_isrv
+extern _Z18page_fault_handlerP5Stack
 global general_isr_tram
 
 %macro pushAll 0
@@ -50,6 +51,25 @@ general_isr_tram:
   mov rdi, rax
 
   call _Z11general_isrv
+
+  mov rsp, rax
+
+  popAll
+
+  add rsp, 8
+
+  iretq
+
+
+pagefault_handler_tram:
+  push qword 0
+  cld
+
+  pushAll
+
+  mod rdi, rsp
+
+  call _Z18page_fault_handlerP5Stack
 
   mov rsp, rax
 

@@ -4,7 +4,7 @@
 #include <concepts>
 
 #define TO_HIGHER_HALF(addr) \
-  addr + 0xffff800000000000;
+  addr + 0xffff800000000000
 
 struct Stack
 {
@@ -56,6 +56,14 @@ uint8_t kmemcmp(uint8_t* mem1, uint8_t* mem2, uint32_t size);
 
 inline void clearbit(uint64_t* val, uint8_t pos) {
   *val = *val & ~((uint64_t)1 << pos);
+}
+
+inline void setbit(uint64_t* val, uint8_t pos) {
+  *val = *val | ((uint64_t)1 << pos);
+}
+
+inline uint8_t getbit(uint64_t* val, uint8_t pos) {
+  return (*val >> pos) & (uint64_t)1;
 }
 //template<acceptable_types T>
 //T read_from_port(uint16_t port);

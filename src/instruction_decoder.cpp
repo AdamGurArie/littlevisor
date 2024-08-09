@@ -21,5 +21,6 @@ operands_decoding decode_in(uint64_t rip) {
 }
 
 operands_decoding decode_out(uint64_t rip) {
-
+  (void)rip;
+  return operands_decoding{};
 }

@@ -2,7 +2,6 @@
 #include "../pmm.h"
 #include "../common.h"
 #include "../mm/npaging.h"
-#include "../drivers/ide.h"
 #include "../instruction_decoder.h"
 #include <cstdint>
 #include <bit>
@@ -10,7 +9,7 @@
 #define QUANTOM 10
 
 static uint64_t vmcb_addr = 0;
-static context guests[10] = {};
+static context guests[10];
 static uint64_t guests_count = 0;
 static uint32_t curr_guest_idx = 0;
 static uint32_t quantom_counter = 0;
@@ -78,7 +77,7 @@ void init_vm() {
 }
 
 void vmexit_handler() {
-  vmcb* vmcb_struct = std::bit_cast<vmcb*>(vmcb_addr);
+  vmcb* vmcb_struct = (vmcb*)vmcb_addr;
   switch(vmcb_struct->control.exitcode) {
     case VMEXIT_IOIO : {
       handle_ioio_vmexit(); 
@@ -91,13 +90,15 @@ void handle_ioio_vmexit() {
   // call the handler function
   // get the return value
   // return it to the destination register/address(if needed)
-  vmcb* vmcb_struct = std::bit_cast<vmcb*<(vmcb_addr);
-  ioio_exitinfo1* exitinfo1 = std::bit_cast<ioio_exitinfo1*>(&vmcb_struct->control.exitinfo1);
+  vmcb* vmcb_struct = (vmcb*)vmcb_addr;
+  uint64_t exitinfo1_val = vmcb_struct->control.exitinfo1;
+  ioio_exitinfo1* exitinfo1 = std::bit_cast<ioio_exitinfo1*>(&exitinfo1_val);
+
   if(((exitinfo1->port >= IO_MASTER_BASE_PORT) && (exitinfo1->port <= (IO_MASTER_BASE_PORT + 7)))      ||
     ((exitinfo1->port >= IO_MASTER_BASE_CONTROL) && (exitinfo1->port <= (IO_MASTER_BASE_CONTROL + 1))) ||
     ((exitinfo1->port >= IO_SLAVE_BASE_PORT) && (exitinfo1->port <= (IO_SLAVE_BASE_PORT + 7)))         ||
     ((exitinfo1->port >= IO_SLAVE_CONTROL) && (exitinfo1->port <= (IO_SLAVE_CONTROL + 1)))) {
-      uint32_t port = exitinfo1->port;
+      //uint32_t port = exitinfo1->port;
       //operands_decoding inst_decode = decode_in(vmcb_struct->state_save_area.rip);
       ide_transaction transaction{.exitinfo = *exitinfo1, .written_val = 0};
       if(exitinfo1->type == 1) {

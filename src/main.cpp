@@ -1,6 +1,8 @@
 #include  "limine.h"
 #include "common.h"
 #include "vmcs/vmcs.h"
+#include "drivers/acpi.h"
+#include "drivers/pci.h"
 #include <cstdint>
 #include "pmm.h"
 #include "interrupts.h"
@@ -11,6 +13,13 @@ static volatile LIMINE_BASE_REVISION(2);
 __attribute__((used, section(".requests")))
 static volatile struct limine_memmap_request memmap_req = {
   .id = LIMINE_MEMMAP_REQUEST,
+  .revision = 0,
+  .response = 0,
+};
+
+__attribute__((used, section(".requests")))
+static volatile struct limine_rsdp_request rsdp_request = {
+  .id = LIMINE_RSDP_REQUEST,
   .revision = 0,
   .response = 0,
 };
@@ -29,6 +38,9 @@ void memcpy(uint8_t* dest, uint8_t* src, uint32_t size) {
 
 void _start() {
   init_pmm(memmap_req.response);
+  init_acpi((uint64_t)rsdp_request.response->address);
+  MCFG* mcfg = get_mcfg();
+  init_pci((uint64_t)mcfg);
   //uint64_t vmxon_region = kpalloc();
   //enable_vmx(vmxon_region);
   init_idt();

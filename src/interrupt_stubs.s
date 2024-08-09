@@ -67,7 +67,7 @@ pagefault_handler_tram:
 
   pushAll
 
-  mod rdi, rsp
+  mov rdi, rsp
 
   call _Z18page_fault_handlerP5Stack
 

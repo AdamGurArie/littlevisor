@@ -1,8 +1,7 @@
 #pragma once
 
+#include "../vm_drivers/ide.h"
 #include <cstdint>
-
-#include "../drivers/ide.h"
 
 #define VMCB_STATESAVE_AREA_OFFSET 0x3FF
 #define MEMORY_SPACE_PER_VM 20000000
@@ -298,22 +297,6 @@ enum VMEXIT_EXITCODE
     VMEXIT_NPF              = 1024, /* nested paging fault */
     VMEXIT_INVALID          =  -1
 };
-
-struct ioio_exitinfo1 {
-  uint8_t type : 1;
-  uint8_t reserved1 : 1;
-  uint8_t str : 1;
-  uint8_t rep : 1;
-  uint8_t sz8 : 1;
-  uint8_t sz16 : 1;
-  uint8_t sz32 : 1;
-  uint8_t a16 : 1;
-  uint8_t a32 : 1;
-  uint8_t a64 : 1;
-  uint8_t seg : 3;
-  uint8_t reserved2 : 3;
-  uint16_t port;
-} __attribute__((packed));
 
 void vmrun(uint64_t vmcb_addr);
 void scheduale();

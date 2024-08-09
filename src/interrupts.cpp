@@ -53,6 +53,7 @@ void general_isr() {
 
 void page_fault_handler(Stack* stack) {
   // read cr2
+  (void)stack;
   uint64_t fault_address = 0;
   asm volatile("mov %0, %%cr2" : "=r"(fault_address));
   if(fault_address > 0x1F7 && fault_address < (0x1FE)) {

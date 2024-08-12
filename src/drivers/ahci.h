@@ -54,15 +54,13 @@ struct port_register_struct {
   uint32_t pxci;
   uint32_t pxsntf;
   uint32_t pxfbs;
-  uint32_t pxdevslp;
-  uint32_t reserved_2;
-  uint32_t pxvs;
+  uint32_t reserved_2[11];
+  uint32_t vendor[4];
 } __attribute__((packed));
 
 struct hba_mem_regs {
-  generic_host_control_struct generic_host_control;
-  uint8_t reserved_1[52];
-  uint8_t reserved_for_nvmhci[160];
+  generic_host_control_struct generic_host_control; //44 bytes
+  uint8_t reserved_1[116];
   uint8_t vendor_specific_registers[96];
   port_register_struct port_registers[32];
 } __attribute__((packed));
@@ -82,7 +80,7 @@ struct command_header {
   uint32_t ctba;
   uint32_t ctbau;
   uint32_t reserved_2[4];
-};
+} __attribute__((packed));
 
 struct prdt {
   uint8_t reserved_1 : 1;
@@ -92,14 +90,14 @@ struct prdt {
   uint32_t dbc : 22;
   uint16_t reserved_3 : 9;
   uint8_t ioc : 1;
-};
+} __attribute__((packed));
 
 struct command_table {
   uint8_t cfis[64];
   uint8_t acmd[16];
   uint8_t reserved[48];
   prdt prdt_list[];
-};
+} __attribute__((packed));
 
 struct FIS_REG_H2D {
   uint8_t fis_type;
@@ -121,7 +119,7 @@ struct FIS_REG_H2D {
   uint8_t icc;
   uint8_t control;
   uint8_t reserved[4];
-};
+} __attribute__((packed));
 
 struct FIS_REG_D2H {
   uint8_t fis_type;
@@ -142,8 +140,9 @@ struct FIS_REG_D2H {
   uint8_t counth;
   uint8_t rsv3[2];
   uint8_t rsv4[4];
-};
+} __attribute__((packed));
 
 void init_ahci();
 void read_from_disk(uint8_t* buff, uint64_t start_sector, uint16_t size);
 void write_to_disk(uint8_t* buff, uint64_t start_sector, uint16_t size);
+void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_sectors, bool write);

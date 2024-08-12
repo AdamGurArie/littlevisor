@@ -12,7 +12,7 @@ struct DESCRIPTION_HEADER {
   uint32_t oem_revision;
   uint32_t creator_id;
   uint32_t creator_revision;
-};
+} __attribute__((packed));
 
 struct RSDP {
   char signature[8];
@@ -24,7 +24,7 @@ struct RSDP {
   uint64_t xsdt_addr;
   uint8_t extended_checksum;
   uint8_t reserved[3];
-};
+} __attribute__((packed));
 
 struct XSDT {
   char signature[4];
@@ -37,7 +37,7 @@ struct XSDT {
   uint32_t creator_id;
   uint32_t creator_revision;
   uint64_t entries[];
-};
+} __attribute__((packed));
 
 struct RSDT {
   char signature[4];
@@ -50,7 +50,7 @@ struct RSDT {
   uint32_t creator_id;
   uint32_t creator_revision;
   uint32_t entries[];
-};
+} __attribute__((packed));
 
 struct MCFG_ENTRY {
   uint64_t base_addr;
@@ -58,7 +58,7 @@ struct MCFG_ENTRY {
   uint8_t start_pci_bus_num;
   uint8_t end_pci_bus_num;
   uint32_t reserved;
-};
+} __attribute__((packed));
 
 struct MCFG {
   uint32_t signature;
@@ -67,11 +67,12 @@ struct MCFG {
   uint8_t checksum;
   char oem_id[6];
   char oem_table_id[8];
+  char oem_revision[4];
   char creator_id[4];
   char creator_revision[4];
   uint64_t reserved;
   MCFG_ENTRY entries[];
-};
+} __attribute__((packed));
 
 void init_acpi(uint64_t rsdp);
 

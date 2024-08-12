@@ -126,3 +126,4 @@ struct header_type_2 {
 void init_pci(uint64_t mcfg_ptr);
 common_pci_header* find_device(uint8_t classcode, uint8_t subclass, uint8_t prog_if);
 common_pci_header* access_device_header(uint8_t segment_group, uint8_t bus, uint8_t device, uint8_t function);
+void enable_device_memio(uint8_t segment_group, uint8_t bus, uint8_t device, uint8_t function);

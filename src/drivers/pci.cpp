@@ -52,3 +52,8 @@ common_pci_header* access_device_header(uint8_t segment_group, uint8_t bus, uint
   
   return (common_pci_header*)0x0;
 }
+
+void enable_device_memio(uint8_t segment_group, uint8_t bus, uint8_t device, uint8_t function) {
+  common_pci_header* pci_header = access_device_header(segment_group, bus, device, function);
+  setbit((uint64_t*)&pci_header->cmd_reg, 1);
+} 

@@ -7,6 +7,7 @@
 #include <bit>
 #include <cstdint>
 #include <math.h>
+#include <sys/types.h>
 
 #define AHCI_CLASS 0x1
 #define AHCI_SUBCLASS 0x6
@@ -37,6 +38,9 @@ static hba_mem_regs* ahci_hba = 0;
 static port_type port_types[32] = {};
 static uint32_t sata_device_port = 0;
 
+void init_port(uint32_t port);
+void map_ports();
+
 void stop_command_engine(uint32_t port);
 void start_command_engine(uint32_t port);
 
@@ -49,11 +53,25 @@ void init_ahci() {
     return;
   }
 
+  setbit((uint64_t*)&ahci_common_header->cmd_reg, 1);
+  clearbit((uint64_t*)&ahci_common_header->cmd_reg, 10);
+
   header_type_0* ahci_header = std::bit_cast<header_type_0*>(ahci_common_header);
   ahci_hba = std::bit_cast<hba_mem_regs*>(TO_HIGHER_HALF(ahci_header->bar5));
-  // init all ports 
-  // map all their types 
+  // init all ports
+  for(uint32_t i = 0; i < 32; i++) {
+    if(getbit(ahci_hba->generic_host_control.pi, i) == 1) {
+      init_port(i);
+    }
+  }
+  // map all their types
+  map_ports();
   // pick the first one that is regular sata(support for using many devices in parallel will come in the future)
+  for(uint32_t i = 0; i < 32; i++) {
+    if(port_types[i] == SATA_SIG_ATA) {
+      sata_device_port = i;
+    }
+  }
 }
 
 void init_port(uint32_t port) {
@@ -66,27 +84,30 @@ void init_port(uint32_t port) {
   stop_command_engine(port);
   // allocate phys memory for command list
   uint64_t cmd_list_addr = kpalloc();
+  kmemset((uint8_t*)TO_HIGHER_HALF(cmd_list_addr), 0x0, 0x1000);
   port_reg->pxclb = cmd_list_addr & 0xFFFFFFFF;
-  port_reg->pxclb = (cmd_list_addr >> 32) & 0xFFFFFFFF;
+  port_reg->pxclbu = (cmd_list_addr >> 32) & 0xFFFFFFFF;
   
-  command_header* cmd_hdr = std::bit_cast<command_header*>(cmd_list_addr);
+  command_header* cmd_hdr = std::bit_cast<command_header*>(TO_HIGHER_HALF(cmd_list_addr));
   for(uint32_t i = 0; i < 32; i++) {
     cmd_hdr[i].prdtl = 8;
     uint64_t cmd_table_addr = kpalloc();
+    kmemset((uint8_t*)TO_HIGHER_HALF(cmd_list_addr), 0x0, 0x1000);
     cmd_hdr[i].ctba = cmd_table_addr & 0xFFFFFFFF;
     cmd_hdr[i].ctbau = (cmd_table_addr >> 32) & 0xFFFFFFFF;
   }
   // allocate phys memory for FIS area
   uint64_t fis_area_addr = kpalloc();
-  port_reg->pxfb = cmd_list_addr & 0xFFFFFFFF;
-  port_reg->pxfbu = (cmd_list_addr >> 32) & 0xFFFFFFFF; 
+  kmemset((uint8_t*)TO_HIGHER_HALF(fis_area_addr), 0x0, 0x1000);
+  port_reg->pxfb = fis_area_addr & 0xFFFFFFFF;
+  port_reg->pxfbu = (fis_area_addr >> 32) & 0xFFFFFFFF; 
   // set pxcmd.fre
   uint64_t reg = port_reg->pxcmd;
   setbit((uint64_t*)&reg, HBA_PxCMD_FRE_OFF);
   port_reg->pxcmd = reg;
   // initiate a spin up(set pxcmd.sud 1)
 
-  reg = port_reg->pxcmd;
+  /**reg = port_reg->pxcmd;
   setbit((uint64_t*)&reg, HBA_PxCMD_SUD_OFF);
   port_reg->pxcmd = reg;
 
@@ -103,7 +124,7 @@ void init_port(uint32_t port) {
      && getbit((uint64_t*)&reg, HBA_PxTFD_STS_DRQ_OFF) == 0 
      && getbit((uint64_t*)&reg, HBA_PxTFD_STS_BSY_OFF) == 0) {
     reg = port_reg->pxtfd;
-  }
+  }**/
 
   start_command_engine(port);
 }
@@ -123,9 +144,9 @@ void stop_command_engine(uint32_t port) {
   
   clearbit((uint64_t*)&reg, HBA_PxCMD_ST_OFF);
   clearbit((uint64_t*)&reg, HBA_PxCMD_FRE_OFF);
-  port_reg->pxcmd = reg;
+  port_reg->pxcmd = 0xc006; //(uint32_t)(reg & 0xFFFFFFFF);
 
-  while(getbit((uint64_t*)&reg, HBA_PxCMD_FR_OFF) == 0 && getbit((uint64_t)&port_reg->pxcmd, HBA_PxCMD_CR_OFF)) {
+  while(getbit((uint64_t*)&reg, HBA_PxCMD_FR_OFF) == 0 && getbit((uint64_t)&reg, HBA_PxCMD_CR_OFF) == 0) {
     reg = port_reg->pxcmd;
   }
   
@@ -143,7 +164,7 @@ void map_ports() {
   uint32_t ports_available = ahci_hba->generic_host_control.pi;
   for(uint32_t i = 0; i < 32; i++) {
     port_register_struct* port_reg = &ahci_hba->port_registers[i];
-    if(getbit((uint64_t)&ports_available, i) == 1) {
+    if(getbit((uint64_t)ports_available, i) == 1) {
       if(port_reg->pxsig == SATA_SIG_ATA) {
         port_types[i] = SATA_SIG_ATA;
 } else if(port_reg->pxsig == SATA_SIG_ATAPI) {
@@ -178,32 +199,31 @@ void start_command_engine(uint32_t port) {
 
 void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_sectors, bool write) {
   port_register_struct* port_reg = &ahci_hba->port_registers[sata_device_port];
-  
   // find available command slot
   uint64_t pxsact = port_reg->pxsact;
   uint64_t pxci = port_reg->pxci;
   uint32_t cmd_slot = 0;
   for(cmd_slot = 0; cmd_slot < 32; cmd_slot++) {
-    if(getbit((uint64_t)pxsact, cmd_slot) && getbit((uint64_t)pxci, cmd_slot)) {
+    if(getbit((uint64_t)pxsact, cmd_slot) == 0 && getbit((uint64_t)pxci, cmd_slot) == 0) {
       break; 
     }
   }
 
   // build command FIS
-  command_header* cmd_hdr = (command_header*)(port_reg->pxclb | ((uint64_t)port_reg->pxclbu << 32));
+  command_header* cmd_hdr = (command_header*)(TO_HIGHER_HALF(port_reg->pxclb | ((uint64_t)port_reg->pxclbu << 32)));
   cmd_hdr->cfl = sizeof(FIS_REG_H2D);
   cmd_hdr->atapi = 0;
   cmd_hdr->write = write ? 1 : 0;
   cmd_hdr->prefetchable = 0;
   cmd_hdr->pmp = 0;
-  cmd_hdr->prdtl = ceil((num_of_sectors*SECTOR_SIZE) / MAX_PRDT_SIZE);
+  cmd_hdr->prdtl = (num_of_sectors*SECTOR_SIZE) / 512;
   
-  command_table* cmd_tbl = (command_table*)(cmd_hdr->ctba | ((uint64_t)cmd_hdr->ctbau << 32));
-  for(uint32_t i = 0; i < cmd_hdr->prdtl-1; i++) {
+  command_table* cmd_tbl = (command_table*)(TO_HIGHER_HALF(cmd_hdr->ctba | ((uint64_t)cmd_hdr->ctbau << 32)));
+  for(uint32_t i = 0; i < cmd_hdr->prdtl; i++) {
     cmd_tbl->prdt_list[i].dba = (uint64_t)buff & 0xFFFFFFFF;
     cmd_tbl->prdt_list[i].dbau = ((uint64_t)buff >> 32) & 0xFFFFFFFF;
-    cmd_tbl->prdt_list[i].dbc = MAX_PRDT_SIZE;
-    buff += MAX_PRDT_SIZE;
+    cmd_tbl->prdt_list[i].dbc = 511;
+    cmd_tbl->prdt_list[i].ioc = 1;
   }
 
   FIS_REG_H2D* fis = (FIS_REG_H2D*)&cmd_tbl->cfis;
@@ -213,6 +233,7 @@ void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_se
   fis->counth = (num_of_sectors >> 8) & 0xFF;
   fis->c = 1;
   fis->icc = 0;
+  fis->pmport = 0;
   fis->lba0 = start_sector & 0xFF;
   fis->lba1 = (start_sector >> 8) & 0xFF;
   fis->lba1 = (start_sector >> 16) & 0xFF;
@@ -220,22 +241,24 @@ void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_se
   fis->lba3 = (start_sector >> 32) & 0xFF;
   fis->lba4 = (start_sector >> 40) & 0xFF;
   fis->lba5 = (start_sector >> 48) & 0xFF;
+  fis->device = 1<<6;
+  port_reg->pxie = 0xFFFFFFFF;
 
-  port_reg->pxci = 1<<cmd_slot;
+  port_reg->pxci |= 1<<cmd_slot; 
   while((port_reg->pxci & (1<<cmd_slot)) == 1);
 }
 
 void read_from_disk(uint8_t* buff, uint64_t start_sector, uint16_t size) {
-  uint16_t real_size = ceil(size / MAX_PRDT_SIZE);
-  uint8_t wrap_buff[size];
-  commit_transaction(buff, start_sector, real_size, false);
+  uint16_t real_size = size / 512;
+  uint8_t wrap_buff[real_size*512];
+  kmemset(wrap_buff, 0x0, sizeof(wrap_buff));
+  commit_transaction(wrap_buff, start_sector, real_size, false);
   kmemcpy(buff, wrap_buff, size);
 }
 
 void write_to_disk(uint8_t* buff, uint64_t start_sector, uint16_t size) {
-  uint16_t real_size = ceil(size / MAX_PRDT_SIZE);
-  uint8_t wrap_buff[real_size];
-  kmemcpy(wrap_buff, buff, size);
-  commit_transaction(wrap_buff, start_sector, real_size, true);
-  kmemcpy(buff, wrap_buff, size);
+  uint16_t real_size = size / 512;
+  //kmemcpy(wrap_buff, buff, size);
+  commit_transaction(buff, start_sector, real_size, true);
+  //kmemcpy(buff, wrap_buff, size);
 }

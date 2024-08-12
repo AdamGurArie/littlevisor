@@ -12,28 +12,35 @@ void init_pmm(struct limine_memmap_response* memmap_response) {
   uint64_t highest_address = 0;
   for(uint32_t entry = 0; entry < memmap_response->entry_count; entry++) {
     struct limine_memmap_entry* curr_entry = memmap_response->entries[entry];
-    if(highest_address < (curr_entry->base + curr_entry->length)) {
-      highest_address = curr_entry->base + curr_entry->length;
+    if(curr_entry->type == LIMINE_MEMMAP_USABLE) {
+      if(highest_address < (curr_entry->base + curr_entry->length)) {
+        highest_address = curr_entry->base + curr_entry->length;
+      }
     }
   }
 
-  uint32_t needed_size = highest_address / 8;
-  for(uint32_t entry = 0; entry < memmap_response->entry_count; entry++) {
+  uint64_t needed_size = highest_address / 0x1000 / 8;
+  for(uint64_t entry = 0; entry < memmap_response->entry_count; entry++) {
     struct limine_memmap_entry* curr_entry = memmap_response->entries[entry];
     if(curr_entry->length >= needed_size && curr_entry->type == LIMINE_MEMMAP_USABLE) {
       page_frame_allocator_struct.bitmap = (uint8_t*)TO_HIGHER_HALF(curr_entry->base);
       page_frame_allocator_struct.bitmap_size = needed_size;
       page_frame_allocator_struct.entry = memmap_response;
+      break;
     }
+  }
+
+  if(page_frame_allocator_struct.bitmap == 0x0) {
+    return; //panic
   }
 
   for(uint32_t entry = 0; entry < memmap_response->entry_count; entry++) {
     struct limine_memmap_entry* curr_entry = memmap_response->entries[entry];
     if(curr_entry->type == LIMINE_MEMMAP_USABLE) {
       for(uint32_t i = 0; i < (curr_entry->length / 0x1000); i++) {
-        uint64_t addr = curr_entry->length + 0x1000 * i;
+        uint64_t addr = curr_entry->base / 0x1000 + i;
         uint32_t byte_idx = addr / 8;
-        uint8_t bit_idx = addr % 8;
+        uint8_t bit_idx = addr % 8; 
         setbit((uint64_t*)&page_frame_allocator_struct.bitmap[byte_idx], bit_idx);
       }
     }
@@ -43,9 +50,9 @@ void init_pmm(struct limine_memmap_response* memmap_response) {
 uint64_t kpalloc() {
   for(uint32_t i = 0; i < page_frame_allocator_struct.bitmap_size; i++) {
     for(uint8_t j = 0; j < 8; j++) {
-      if(getbit(page_frame_allocator_struct.bitmap[i], j) == 1) {
-        setbit((uint64_t*)&page_frame_allocator_struct.bitmap[i], j);
-        return (uint64_t)((i+j)*0x1000);
+      if(getbit((uint64_t*)&page_frame_allocator_struct.bitmap[i], j) == 1) {
+        clearbit((uint64_t*)&page_frame_allocator_struct.bitmap[i], j);
+        return (uint64_t)((i*8+j)*0x1000);
       }
     }
   }

@@ -12,9 +12,9 @@ void print_to_serial(uint8_t* text, int size) {
   }
 }
 
-void setbit(uint64_t* val, uint8_t pos) {
-  *val = *val | ((uint64_t)1 << pos);
-}
+//void setbit(uint64_t* val, uint8_t pos) {
+//  *val = *val | ((uint64_t)1 << pos);
+//}
 
 void kmemcpy(uint8_t* dest, uint8_t* src, uint32_t size) {
   for(uint32_t i = 0; i < size; i++) {

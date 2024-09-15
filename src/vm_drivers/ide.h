@@ -24,6 +24,17 @@ enum ide_base_ports {
   COMMAND_REGISTER,
 };
 
+enum status_register {
+  ST_REG_ERR,
+  ST_REG_IDX,
+  ST_REG_CORR,
+  ST_REG_DRQ,
+  ST_REG_SRV,
+  ST_REG_DF,
+  ST_REG_RDY,
+  ST_REG_BSY
+};
+
 enum ide_control_ports {
   ALTERNATE_STATUS_REGISTER,
   DEVICE_CONTROL_REGISTER,
@@ -54,6 +65,7 @@ struct ide_transaction {
 class ideDevice {
   private:
   bool virtualized;
+  uint32_t fd;
   // IO base registers
   uint16_t data_register;
   uint16_t error_register;
@@ -66,6 +78,10 @@ class ideDevice {
   uint8_t status_register;
   uint8_t command_register;
   uint8_t registers[12];
+  uint64_t size_of_data_to_transfer;
+  uint64_t offset_in_data;
+  uint8_t* buffer_with_data;
+  uint8_t ready_to_trasnfer;
 
   //Control base registers
   uint8_t alter_status_register;
@@ -74,19 +90,16 @@ class ideDevice {
 
   private:
   void handle_registerWrite(ide_transaction transaction);
-
   uint64_t handle_registerRead(ide_transaction transaction);
-
   void handle_command();
-
   uint64_t passthrough_transaction(ide_transaction transaction);
-
   void handle_readSector();
-
   void handle_writeSector();
+  uint16_t read_data_io();
+  void write_data_io(uint16_t data);
 
   public:
-  ideDevice(bool virtualized) : virtualized(virtualized) {
+  ideDevice(bool virtualized, uint32_t fd) : virtualized(virtualized), fd(fd) {
     mapPage(IO_MASTER_BASE_PORT, IO_MASTER_BASE_PORT, 0x0);
     mapPage(IO_MASTER_BASE_CONTROL, IO_MASTER_BASE_CONTROL, 0x0);
     mapPage(IO_SLAVE_BASE_PORT, IO_SLAVE_BASE_PORT, 0x0);
@@ -101,6 +114,7 @@ class ideDevice {
   }
 
   uint64_t handle_transaction(ide_transaction transaction);
+  uint8_t check_if_ready_for_transfer();
 
   inline void set_virtualized_flag(bool virtualized) {
     this->virtualized = virtualized;

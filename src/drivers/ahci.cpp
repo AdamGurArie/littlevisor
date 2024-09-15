@@ -219,14 +219,24 @@ void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_se
   cmd_hdr->prdtl = (num_of_sectors*SECTOR_SIZE) / 512;
   
   command_table* cmd_tbl = (command_table*)(TO_HIGHER_HALF(cmd_hdr->ctba | ((uint64_t)cmd_hdr->ctbau << 32)));
-  for(uint32_t i = 0; i < cmd_hdr->prdtl; i++) {
+
+  uint32_t i = 0;
+  for(i = 0; i < cmd_hdr->prdtl - 1; i++) {
     cmd_tbl->prdt_list[i].dba = (uint64_t)buff & 0xFFFFFFFF;
     cmd_tbl->prdt_list[i].dbau = ((uint64_t)buff >> 32) & 0xFFFFFFFF;
-    cmd_tbl->prdt_list[i].dbc = 511;
-    cmd_tbl->prdt_list[i].ioc = 1;
+    cmd_tbl->prdt_list[i].dbc = 8*1024 - 1;
+    cmd_tbl->prdt_list[i].ioc = 0;
+    buff += 4*1024;
+    num_of_sectors -= 16;
   }
 
+  cmd_tbl->prdt_list[i].dba = (uint64_t)buff & 0xFFFFFFFF;
+  //cmd_tbl->prdt_list[i].dbau = ((uint64_t)buff >> 32) & 0xFFFFFFFF;
+  cmd_tbl->prdt_list[i].dbc = num_of_sectors * 512 - 1;
+  cmd_tbl->prdt_list[i].ioc = 0;
+
   FIS_REG_H2D* fis = (FIS_REG_H2D*)&cmd_tbl->cfis;
+  kmemset((uint8_t*)fis, 0x0, sizeof(FIS_REG_H2D));
   fis->fis_type = REG_H2D;
   fis->command = write ? ATA_CMD_WRITE_DMA_EX : ATA_CMD_READ_DMA_EX;
   fis->countl = num_of_sectors & 0xFF;

@@ -51,11 +51,11 @@ void _start() {
   //write_to_disk(read_buff, 0, 512);
   //kmemset(read_buff, 0x0, 512);
   //read_from_disk(read_buff, 0, 512);
-  uint8_t* write_buff = (uint8_t*)0x2000;
+  uint8_t* write_buff = (uint8_t*)0x100000;
   kmemset(TO_HIGHER_HALF(write_buff), 0x1, 512);
-  commit_transaction((uint8_t*)0x2000, 0, 1, true);
-  kmemset(TO_HIGHER_HALF(write_buff), 0x0, 512);
-  commit_transaction((uint8_t*)0x2000, 0, 1, false);
+  //commit_transaction((uint8_t*)0x2000, 0, 1, true);
+  //kmemset(TO_HIGHER_HALF(write_buff), 0x0, 512);
+  commit_transaction((uint8_t*)write_buff, 0, 1, true);
   //uint64_t vmxon_region = kpalloc();
   //enable_vmx(vmxon_region);
   init_vm();

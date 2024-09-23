@@ -1,10 +1,13 @@
 #include "ata_pio.h"
 #include "../kheap.h"
+#include "../common.h"
+#include "../vmcs/vmcs.h"
 #include <cstdint>
+#include <cstdlib>
 
 #define SECTOR_SIZE 512
 
-uint64_t ata_pio_device::dispatch_command(ide_transaction transaction) {
+void ata_pio_device::dispatch_command(ide_transaction transaction) {
   // handle register IO 
   if(transaction.exitinfo.port > 0x1F0 && transaction.exitinfo.port < 0x1F7 ||
      transaction.exitinfo.port > 0x170 && transaction.exitinfo.port < 0x177) {
@@ -33,6 +36,13 @@ uint64_t ata_pio_device::dispatch_command(ide_transaction transaction) {
   // handle data register IO
   if(transaction.exitinfo.port == 0x1F0 || transaction.exitinfo.port == 0x170) {
     // write/read from data register, handle data IO
+    if(transaction.exitinfo.type == 1) {
+      this->handle_write_data(transaction);
+
+    } else {
+      this->handle_read_data(transaction);
+
+    }
   }
 }
 
@@ -41,48 +51,129 @@ void ata_pio_device::handle_command(uint16_t command) {
     // read 28bit LBA
     this->device_in_transfer = 1;
     this->transfer_type = READ_SECTORS;
-    this->transfer_buff = kmalloc(this->registers.sec_count_reg * this->storage_dev.get_sector_size());
+    this->transfer_buff = (uint8_t*)kmalloc(this->registers.sec_count_reg * this->storage_dev->get_sector_size());
     this->buff_offset = 0;
-    this->size_remaining = this->registers.sec_count_reg * this->storage_dev.get_sector_size();
+    this->size_remaining = this->registers.sec_count_reg * this->storage_dev->get_sector_size();
+    this->handle_read_sectors();
 
   } else if(command == 0x30) {
     // write 28bit LBA
     this->device_in_transfer = 1;
     this->transfer_type = WRITE_SECTORS;
-    this->transfer_buff = kmalloc(this->registers.sec_count_reg * this->storage_dev.get_sector_size());
+    this->transfer_buff = (uint8_t*)kmalloc(this->registers.sec_count_reg * this->storage_dev->get_sector_size());
     this->buff_offset = 0;
-    this->size_remaining = this->registers.sec_count_reg * this->storage_dev.get_sector_size();
+    this->size_remaining = this->registers.sec_count_reg * this->storage_dev->get_sector_size();
 
   } else if(command == 0x24) {
     // read 48bit LBA
     this->device_in_transfer = 1;
     this->transfer_type = READ_SECTORS;
-    this->transfer_buff = kmalloc(this->registers.sec_count_reg * this->storage_dev.get_sector_size());
+    this->transfer_buff = (uint8_t*)kmalloc(this->registers.sec_count_reg * this->storage_dev->get_sector_size());
     this->buff_offset = 0;
-    this->size_remaining = this->registers.sec_count_reg * this->storage_dev.get_sector_size();
+    this->size_remaining = this->registers.sec_count_reg * this->storage_dev->get_sector_size();
+    this->handle_read_sectors();
 
   } else if(command == 0x34) {
     // write 48bit LBA
     this->device_in_transfer = 1;
     this->transfer_type = WRITE_SECTORS;
-    this->transfer_buff = kmalloc(this->registers.sec_count_reg * this->storage_dev.get_sector_size());
+    this->transfer_buff = (uint8_t*)kmalloc(this->registers.sec_count_reg * this->storage_dev->get_sector_size());
     this->buff_offset = 0;
-    this->size_remaining = this->registers.sec_count_reg * this->storage_dev.get_sector_size();
+    this->size_remaining = this->registers.sec_count_reg * this->storage_dev->get_sector_size();
+    this->handle_write_sectors();
+
+  } else if(command == 0xEC) {
+    // identify command
+    this->device_in_transfer = 1;
+    this->transfer_type = IDENTIFY_CMD;
+    this->transfer_buff = (uint8_t*)kmalloc(512);
+    this->buff_offset = 0;
+    this->size_remaining = 512;
+    this->handle_identify_command();
+
   }
 }
 
 void ata_pio_device::handle_read_data(ide_transaction transaction) {
   if(this->device_in_transfer == 1 && this->transfer_type == READ_SECTORS) {
-    
+    if(transaction.exitinfo.sz8) {
+      uint8_t data = 0;
+      kmemcpy((uint8_t*)&data, (uint8_t*)&this->transfer_buff[this->buff_offset], sizeof(uint8_t));
+      edit_vmcb_state(RAX, data);
+      this->buff_offset += sizeof(uint8_t);
+
+    } else if(transaction.exitinfo.sz16) {
+      uint16_t data = 0;
+      kmemcpy((uint8_t*)&data, (uint8_t*)&this->transfer_buff[this->buff_offset], sizeof(uint16_t));
+      edit_vmcb_state(RAX, data);
+      this->buff_offset += sizeof(uint16_t);
+
+    } else if(transaction.exitinfo.sz32) {
+      uint32_t data = 0;
+      kmemcpy((uint8_t*)&data, (uint8_t*)&this->transfer_buff[this->buff_offset], sizeof(uint32_t));
+      edit_vmcb_state(RAX, data);
+      this->buff_offset += sizeof(uint32_t);
+
+    }
+
   } else {
-    // write to somewhere
+    edit_vmcb_state(RAX, 0);
+  }
+
+  if(this->buff_offset == this->size_remaining) {
+    this->device_in_transfer = 0;
+  } else {
+    // notify that new data had arrived
   }
 }
 
 void ata_pio_device::handle_write_data(ide_transaction transaction) {
   if(this->device_in_transfer == 1 && this->transfer_type == WRITE_SECTORS) {
+    if(transaction.exitinfo.sz8) {
+      kmemcpy((uint8_t*)&this->transfer_buff[this->buff_offset], (uint8_t*)&transaction.written_val, sizeof(uint8_t));
+      this->buff_offset += sizeof(uint8_t);
 
+    } else if(transaction.exitinfo.sz16) {
+      kmemcpy((uint8_t*)&this->transfer_buff[this->buff_offset], (uint8_t*)&transaction.written_val, sizeof(uint16_t));
+      this->buff_offset += sizeof(uint16_t);
+
+    } else if(transaction.exitinfo.sz32) {
+      kmemcpy((uint8_t*)&this->transfer_buff[this->buff_offset], (uint8_t*)&transaction.written_val, sizeof(uint32_t));
+      this->buff_offset += sizeof(uint32_t);
+
+    }
   } else {
     // write to somewhere
+  }
+
+  if(this->buff_offset == this->size_remaining) {
+    this->device_in_transfer = 0;
+    this->handle_write_sectors();
+  }
+}
+
+void ata_pio_device::handle_identify_command() {
+  kmemset(this->transfer_buff, 0x0, 512);
+}
+
+void ata_pio_device::handle_read_sectors() {
+  uint32_t offset = 0;
+  uint32_t sector = this->registers.sec_num_reg;
+  uint32_t sector_size = this->storage_dev->get_sector_size();
+
+  for(uint32_t i = 0; i < this->registers.sec_num_reg; i++) {
+    storage_dev->read_sector(sector + i, &this->transfer_buff[offset]);
+    offset += sector_size;
+  }
+}
+
+void ata_pio_device::handle_write_sectors() {
+  uint32_t offset = 0;
+  uint32_t sector = this->registers.sec_num_reg;
+  uint32_t sector_size = this->storage_dev->get_sector_size();
+
+  for(uint32_t i = 0; i < this->registers.sec_num_reg; i++) {
+    storage_dev->write_sector(sector + i, &this->transfer_buff[offset]);
+    offset += sector_size;
   }
 }

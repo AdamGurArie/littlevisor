@@ -18,7 +18,8 @@ struct ata_pio_registers_s {
 
 enum transfer_type_e {
   READ_SECTORS,
-  WRITE_SECTORS
+  WRITE_SECTORS,
+  IDENTIFY_CMD
 };
 
 enum ata_pio_base_ports {
@@ -60,7 +61,7 @@ class ata_pio_device {
     ata_pio_registers_s registers;
     transfer_type_e transfer_type;
     bool device_in_transfer;
-    storage_device storage_dev;
+    storage_device* storage_dev;
     uint8_t* transfer_buff;
     uint32_t buff_offset;
     uint32_t size_remaining;
@@ -68,14 +69,28 @@ class ata_pio_device {
   private:
     uint16_t handle_read_register(ata_pio_base_ports port);
     void handle_write_register(ata_pio_base_ports port, uint16_t data);
-    void handle_read_sector(ide_transaction transaction);
-    void handle_write_sector(ide_transaction transaction);
+    void handle_read_sectors();
+    void handle_write_sectors();
     void handle_read_data(ide_transaction transaction);
     void handle_write_data(ide_transaction transaction);
     void handle_command(uint16_t command);
+    void handle_identify_command();
  
 
   public:
-    ata_pio_device() = default;
-    uint64_t dispatch_command(ide_transaction transaction);
+    ata_pio_device(storage_device* virt_storage_device) : storage_dev(virt_storage_device) {};
+    void dispatch_command(ide_transaction transaction);
+};
+
+class virtual_storage_device : storage_device {
+  private:
+    uint32_t sector_size;
+    char* file_name;
+
+  public:
+
+  virtual_storage_device(char* file_name, uint32_t sector_size) : file_name(file_name), sector_size(sector_size) {};
+  uint8_t read_sector(uint32_t sector_number, uint8_t* buff);
+  uint8_t write_sector(uint32_t sector_number, uint8_t* buff);
+  uint64_t get_sector_size();
 };

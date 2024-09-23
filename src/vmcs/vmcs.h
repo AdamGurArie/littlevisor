@@ -1,6 +1,7 @@
 #pragma once
 
-#include "../vm_drivers/ide.h"
+//#include "../vm_drivers/ide.h"
+#include "../vm_drivers/ata_pio.h"
 #include <cstdint>
 
 #define VMCB_STATESAVE_AREA_OFFSET 0x3FF
@@ -8,11 +9,34 @@
 
 static uint32_t list_of_ports_to_intercept[] = {0x1f7};
 
+
+enum vmcb_registers {
+  RAX,
+  RCX,
+  RBX
+};
+
+enum event_type_e {
+  INTR = 0,
+  NMI = 2,
+  EXCEPTION = 3,
+  SINTR = 4
+};
+
 struct segment_selector {
   uint16_t selector;
   uint16_t attrib;
   uint32_t limit;
   uint64_t base;
+} __attribute__((packed));
+
+struct event_injection_field {
+  uint8_t vector;
+  uint8_t type : 3;
+  uint8_t error_code_valid : 1;
+  uint32_t reserved : 19;
+  uint8_t valid : 1;
+  uint32_t errorcode;
 } __attribute__((packed));
 
 struct vmcb_control {
@@ -43,7 +67,7 @@ struct vmcb_control {
   uint64_t np_enable;
   uint64_t avic_apic_bar_reserved;
   uint64_t guest_phys_addr_ghcb;
-  uint64_t eventinj;
+  event_injection_field eventinj;
   uint64_t n_cr3;
   uint64_t lbr_virtualization_enable;
   uint32_t vmcb_clean_bits;
@@ -147,7 +171,7 @@ struct vmcb {
 struct context {
   vmcb_state_save_area guest;
   uint64_t guest_cr3;
-  ideDevice ide;
+  ata_pio_device ata_device;
 };
 
 enum VMEXIT_EXITCODE
@@ -305,3 +329,5 @@ void vmrun();
 void init_vm();
 void vmexit_handler();
 void handle_ioio_vmexit();
+void edit_vmcb_state(vmcb_registers reg, uint64_t value);
+void inject_event(uint8_t vector, event_type_e type, bool push_error_code, uint32_t error_code);

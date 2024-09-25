@@ -7,6 +7,9 @@
 #define VMCB_STATESAVE_AREA_OFFSET 0x3FF
 #define MEMORY_SPACE_PER_VM 20000000
 
+#define MEM_SIZE_PER_VM 0x4000000
+#define MEM_SIZE_COREBOOT 0x1000000
+
 static uint32_t list_of_ports_to_intercept[] = {0x1f7};
 
 

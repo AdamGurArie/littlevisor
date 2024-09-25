@@ -82,7 +82,7 @@ class ata_pio_device {
     void dispatch_command(ide_transaction transaction);
 };
 
-class virtual_storage_device : storage_device {
+class virtual_storage_device : public storage_device {
   private:
     uint32_t sector_size;
     char* file_name;

@@ -3,6 +3,7 @@
 #include "../common.h"
 #include "../mm/npaging.h"
 #include "../fs/vfs.h"
+#include "../pmm.h"
 #include "../kheap.h"
 #include "../instruction_decoder.h"
 #include <cstdint>
@@ -69,6 +70,7 @@ void init_vm() {
   // allocate memory for the vmcb
   vmcb_addr = kpalloc();
   vmcb* vmcb_struct = (vmcb*)vmcb_addr;
+  kmemset((uint8_t*)vmcb_addr, 0x0, sizeof(vmcb));
 
   // init ioio map
   ioio_map_addr = kpalloc_contignious(3);
@@ -80,16 +82,78 @@ void init_vm() {
   }
 
   // init vmcb struct with the right paramemeters
+  vmcb_struct->state_save_area.cs.selector = 0xF000;
+  vmcb_struct->state_save_area.cs.base = 0xFFFF0000;
+  vmcb_struct->state_save_area.cs.limit = 0xFFFF;
+  vmcb_struct->state_save_area.cs.attrib = 0x9A;
+
+  vmcb_struct->state_save_area.ds.selector = 0x0;
+  vmcb_struct->state_save_area.ds.base = 0x0;
+  vmcb_struct->state_save_area.ds.limit = 0xFFFF;
+  vmcb_struct->state_save_area.ds.attrib = 0x92;
+
+  vmcb_struct->state_save_area.es.selector = 0x0;
+  vmcb_struct->state_save_area.es.base = 0x0;
+  vmcb_struct->state_save_area.es.limit = 0xFFFF;
+  vmcb_struct->state_save_area.es.attrib = 0x0;
+
+  vmcb_struct->state_save_area.gs.selector = 0x0;
+  vmcb_struct->state_save_area.gs.base = 0x0;
+  vmcb_struct->state_save_area.gs.limit = 0xFFFF;
+  vmcb_struct->state_save_area.gs.attrib = 0x0;
+
+  vmcb_struct->state_save_area.fs.selector = 0x0;
+  vmcb_struct->state_save_area.fs.base = 0x0;
+  vmcb_struct->state_save_area.fs.limit = 0xFFFF;
+  vmcb_struct->state_save_area.fs.attrib = 0x0;
+
+  vmcb_struct->state_save_area.ss.selector = 0x0;
+  vmcb_struct->state_save_area.ss.base = 0x0;
+  vmcb_struct->state_save_area.ss.limit = 0xFFFF;
+  vmcb_struct->state_save_area.ss.attrib = 0x0;
+
+  vmcb_struct->state_save_area.gdtr.base = 0x0;
+  vmcb_struct->state_save_area.gdtr.limit = 0x0;
+  vmcb_struct->state_save_area.gdtr.attrib = 0x0;
+  vmcb_struct->state_save_area.gdtr.selector = 0x0;
+
+  vmcb_struct->state_save_area.idtr.selector = 0x0;
+  vmcb_struct->state_save_area.idtr.base = 0x0;
+  vmcb_struct->state_save_area.idtr.limit = 0x0;
+  vmcb_struct->state_save_area.idtr.attrib = 0x0;
+
+  vmcb_struct->state_save_area.ldtr.selector = 0x0;
+  vmcb_struct->state_save_area.ldtr.base = 0x0;
+  vmcb_struct->state_save_area.ldtr.limit = 0xFFFF;
+  vmcb_struct->state_save_area.ldtr.attrib = 0x82;
+
+  vmcb_struct->state_save_area.tr.selector = 0x0;
+  vmcb_struct->state_save_area.tr.base = 0x0;
+  vmcb_struct->state_save_area.tr.limit = 0xFFFF;
+  vmcb_struct->state_save_area.tr.attrib = 0x83;
+
+  vmcb_struct->state_save_area.rip = 0xFFF0;
+  vmcb_struct->state_save_area.cr0 = 0x60000010;
+  vmcb_struct->state_save_area.cr2 = 0x0;
+  vmcb_struct->state_save_area.cr3 = 0x0;
+  vmcb_struct->state_save_area.cr4 = 0x0;
+  vmcb_struct->state_save_area.rflags = 0x0;
+  vmcb_struct->state_save_area.efer = 0x0;
+  vmcb_struct->state_save_area.rax = 0x0;
+  vmcb_struct->control.interrupt_shadow = 0x0;
+  vmcb_struct->state_save_area.rsp = 0x0;
+
   // load coreboot to memory address starting with RIP
-  uint32_t fd = openFile((char*)"core_boot");
+  uint32_t fd = openFile((char*)"core_boot"); 
+  uint64_t coreboot_addr = kpalloc_contignious(MEM_SIZE_COREBOOT / 0x1000);
   readFile(fd, (char*)vmcb_struct->state_save_area.rip, 100);
+  //map to rip address
 
   // create ide virtual driver
   uint32_t storage_dev_fd = openFile((char*)"ide_disk");
-  void* storage_dev_addr = kmalloc(sizeof(virtual_storage_device));
-  virtual_storage_device* storage_dev = new (storage_dev_addr) virtual_storage_device((char*)"ide_disk", 512);
+  virtual_storage_device* storage_dev = new virtual_storage_device((char*)"ide_disk", 512);
+  ata_pio_device* ata_device = new ata_pio_device(storage_dev); 
   // create virtual cmos 
-  // load disk image into drive
   // vmrun
 
   vmrun();

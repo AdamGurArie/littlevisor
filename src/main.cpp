@@ -46,7 +46,7 @@ void _start() {
   MCFG* mcfg = get_mcfg();
   init_pci((uint64_t)mcfg);
   init_ahci();
-  uint8_t read_buff[512] = {};
+  //uint8_t read_buff[512] = {};
   //kmemset(read_buff, 0x1, 512);
   //write_to_disk(read_buff, 0, 512);
   //kmemset(read_buff, 0x0, 512);

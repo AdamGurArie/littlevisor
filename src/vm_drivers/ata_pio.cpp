@@ -9,10 +9,10 @@
 
 void ata_pio_device::dispatch_command(ide_transaction transaction) {
   // handle register IO 
-  if(transaction.exitinfo.port > 0x1F0 && transaction.exitinfo.port < 0x1F7 ||
-     transaction.exitinfo.port > 0x170 && transaction.exitinfo.port < 0x177) {
+  if(((transaction.exitinfo.port > 0x1F0) && (transaction.exitinfo.port < 0x1F7)) ||
+     ((transaction.exitinfo.port > 0x170) && (transaction.exitinfo.port < 0x177))) {
       ata_pio_base_ports port = (ata_pio_base_ports)0;
-      if(transaction.exitinfo.port > 0x1F0 && transaction.exitinfo.port < 0x1F7) {
+      if((transaction.exitinfo.port > 0x1F0) && (transaction.exitinfo.port < 0x1F7)) {
         port = (ata_pio_base_ports)(transaction.exitinfo.port - 0x1F0);
       } else {
         port = (ata_pio_base_ports)(transaction.exitinfo.port - 0x170);
@@ -28,13 +28,13 @@ void ata_pio_device::dispatch_command(ide_transaction transaction) {
   }
 
   // handle commands
-  if(transaction.exitinfo.port == 0x1F7 || transaction.exitinfo.port == 0x177) {
+  if((transaction.exitinfo.port == 0x1F7) || (transaction.exitinfo.port == 0x177)) {
     this->registers.cmd_reg = transaction.written_val;
     this->handle_command(transaction.written_val); 
   }
   
   // handle data register IO
-  if(transaction.exitinfo.port == 0x1F0 || transaction.exitinfo.port == 0x170) {
+  if((transaction.exitinfo.port == 0x1F0) || (transaction.exitinfo.port == 0x170)) {
     // write/read from data register, handle data IO
     if(transaction.exitinfo.type == 1) {
       this->handle_write_data(transaction);

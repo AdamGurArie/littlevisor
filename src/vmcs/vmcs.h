@@ -10,9 +10,6 @@
 #define MEM_SIZE_PER_VM 0x4000000
 #define MEM_SIZE_COREBOOT 0x1000000
 
-static uint32_t list_of_ports_to_intercept[] = {0x1f7};
-
-
 enum vmcb_registers {
   RAX,
   RCX,
@@ -174,7 +171,7 @@ struct vmcb {
 struct context {
   vmcb_state_save_area guest;
   uint64_t guest_cr3;
-  ata_pio_device ata_device;
+  ata_pio_device* ata_device;
 };
 
 enum VMEXIT_EXITCODE

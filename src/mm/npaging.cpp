@@ -7,14 +7,18 @@
 static uint64_t cr3_val = 0;
 static uint64_t host_cr3 = 0;
 
-void mapPage(uint64_t phys_addr, uint64_t virt_addr, uint16_t flags) {
+void mapPage(uint64_t phys_addr, uint64_t virt_addr, uint16_t flags, uint64_t cr3) {
+  if(cr3 == 0) {
+    cr3 = cr3_val;
+  }
+
   uint8_t indexes[4] = {0};
   indexes[0] = (virt_addr >> 39) & 0x1FF;
   indexes[1] = (virt_addr >> 30) & 0x1FF;
   indexes[2] = (virt_addr >> 21) & 0x1FF;
   indexes[3] = (virt_addr >> 12) & 0x1FF;
 
-  pagingLevel* table = std::bit_cast<pagingLevel*>(cr3_val); 
+  pagingLevel* table = std::bit_cast<pagingLevel*>(cr3); 
   
   for(int i = 0; i < 3; i++) {
     if((table->entries[indexes[i]] & 1) == 0) {
@@ -40,10 +44,14 @@ void switch_pageMap(uint64_t cr3) {
 void create_linear_virtual_space(uint64_t size) {
   for(uint64_t i = 0; i < size; i+=0x1000) {
     uint64_t page = kpalloc();
-    mapPage(page, i, GUEST_PHYSICAL_PAGE_FLAG);
+    mapPage(page, i, GUEST_PHYSICAL_PAGE_FLAG, 0);
   }
 }
 
 void save_host_pageMap() {
   asm volatile("movq %0, %%cr3" : "=r"(host_cr3));
+}
+
+uint64_t create_clean_virtual_space() {
+  return kpalloc();
 }

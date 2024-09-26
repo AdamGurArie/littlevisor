@@ -210,7 +210,7 @@ void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_se
   }
 
   // build command FIS
-  command_header* cmd_hdr = (command_header*)(TO_HIGHER_HALF(port_reg->pxclb | ((uint64_t)port_reg->pxclbu << 32)));
+  command_header* cmd_hdr = (command_header*)(TO_HIGHER_HALF((port_reg->pxclb | ((uint64_t)port_reg->pxclbu << 32))));
   cmd_hdr->cfl = sizeof(FIS_REG_H2D);
   cmd_hdr->atapi = 0;
   cmd_hdr->write = write ? 1 : 0;
@@ -218,9 +218,9 @@ void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_se
   cmd_hdr->pmp = 0;
   cmd_hdr->prdtl = (num_of_sectors*SECTOR_SIZE) / 512;
   
-  command_table* cmd_tbl = (command_table*)(TO_HIGHER_HALF(cmd_hdr->ctba | ((uint64_t)cmd_hdr->ctbau << 32)));
+  command_table* cmd_tbl = (command_table*)(TO_HIGHER_HALF((cmd_hdr->ctba | ((uint64_t)cmd_hdr->ctbau << 32))));
 
-  uint32_t i = 0;
+  uint16_t i = 0;
   for(i = 0; i < cmd_hdr->prdtl - 1; i++) {
     cmd_tbl->prdt_list[i].dba = (uint64_t)buff & 0xFFFFFFFF;
     cmd_tbl->prdt_list[i].dbau = ((uint64_t)buff >> 32) & 0xFFFFFFFF;

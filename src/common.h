@@ -4,10 +4,10 @@
 #include <concepts>
 
 #define TO_HIGHER_HALF(addr) \
-  addr + 0xffff800000000000
+  (addr + 0xffff800000000000)
 
 #define TO_LOWER_HALF(addr) \
-  addr - 0xffff800000000000 
+  (addr - 0xffff800000000000)
 
 struct Stack
 {

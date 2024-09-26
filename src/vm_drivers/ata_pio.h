@@ -4,6 +4,12 @@
 //#include "ide.h"
 #include <cstdint>
 
+#define IO_MASTER_BASE_PORT    0x1F0
+#define IO_MASTER_BASE_CONTROL 0x3F6
+
+#define IO_SLAVE_BASE_PORT     0x170
+#define IO_SLAVE_CONTROL       0x376
+
 struct ata_pio_registers_s {
   uint16_t data_reg;
   uint16_t error_reg;
@@ -89,7 +95,7 @@ class virtual_storage_device : public storage_device {
 
   public:
 
-  virtual_storage_device(char* file_name, uint32_t sector_size) : file_name(file_name), sector_size(sector_size) {};
+  virtual_storage_device(char* file_name, uint32_t sector_size) : sector_size(sector_size), file_name(file_name) {};
   uint8_t read_sector(uint32_t sector_number, uint8_t* buff);
   uint8_t write_sector(uint32_t sector_number, uint8_t* buff);
   uint64_t get_sector_size();

@@ -1,5 +1,5 @@
 #pragma once
-
+/**
 #include "../mm/npaging.h"
 #include <cstdint>
 
@@ -119,4 +119,4 @@ class ideDevice {
   inline void set_virtualized_flag(bool virtualized) {
     this->virtualized = virtualized;
   }
-};
+};**/

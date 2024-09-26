@@ -1,4 +1,4 @@
-#include "ide.h"
+/**#include "ide.h"
 
 #include "../mm/npaging.h"
 #include "../fs/vfs.h"
@@ -105,4 +105,4 @@ uint64_t ideDevice::passthrough_transaction(ide_transaction transaction) {
     //asm volatile("out %0" :: "r"(transaction.exitinfo.port));
     return 0;
   }
-}
+}**/

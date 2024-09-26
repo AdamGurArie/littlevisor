@@ -11,8 +11,9 @@
 
 #define QUANTOM 10
 
+static uint32_t list_of_ports_to_intercept[] = {0x1f7};
 static uint64_t vmcb_addr = 0;
-static context guests[10];
+static context guests[10] = {};
 static uint64_t guests_count = 0;
 static uint32_t curr_guest_idx = 0;
 static uint32_t quantom_counter = 0;
@@ -145,14 +146,26 @@ void init_vm() {
 
   // load coreboot to memory address starting with RIP
   uint32_t fd = openFile((char*)"core_boot"); 
-  uint64_t coreboot_addr = kpalloc_contignious(MEM_SIZE_COREBOOT / 0x1000);
-  readFile(fd, (char*)vmcb_struct->state_save_area.rip, 100);
   //map to rip address
+  uint32_t file_size = getFileSize(fd);
+  uint32_t num_of_pages = file_size / 0x1000;
+  uint64_t vm_mem_map = create_clean_virtual_space();
+  
+  for(uint32_t i = 0; i < num_of_pages; i++) {
+    uint64_t coreboot_page = kpalloc();
+    mapPage(coreboot_page + i * 0x1000,
+            vmcb_struct->state_save_area.rip + i * 0x1000,
+            0x8E,
+            vm_mem_map);
+
+    readFile(fd, (char*)(vmcb_struct->state_save_area.rip + i * 0x1000), 0x1000);
+  }
+
+  vmcb_struct->control.n_cr3 = vm_mem_map;
 
   // create ide virtual driver
-  uint32_t storage_dev_fd = openFile((char*)"ide_disk");
-  virtual_storage_device* storage_dev = new virtual_storage_device((char*)"ide_disk", 512);
-  ata_pio_device* ata_device = new ata_pio_device(storage_dev); 
+  //virtual_storage_device* storage_dev = new virtual_storage_device((char*)"ide_disk", 512);
+  //ata_pio_device* ata_device = new ata_pio_device(storage_dev); 
   // create virtual cmos 
   // vmrun
 
@@ -189,15 +202,13 @@ void handle_ioio_vmexit() {
         transaction.written_val = vmcb_struct->state_save_area.rax;
       }
 
-      uint64_t output = guests[curr_guest_idx].ide.handle_transaction(transaction);
-      if(exitinfo1->type == 0) {
-        vmcb_struct->state_save_area.rax = output;
-      }
+      //uint64_t output = guests[curr_guest_idx].ide.handle_transaction(transaction);
+      guests[curr_guest_idx].ata_device->dispatch_command(transaction);
   }
 }
 
 void inject_event(uint8_t vector, event_type_e type, uint8_t push_error_code, uint32_t error_code) {
-  if(vector > 255 && push_error_code > 1) {
+  if(push_error_code > 1) {
     return;
   }
   

@@ -5,7 +5,7 @@
 #include <bit>
 
 static MCFG* mcfg = 0;
-static uint16_t max_seg_group = 0;
+//static uint16_t max_seg_group = 0;
 
 void init_pci(uint64_t mcfg_ptr) {
   mcfg = (MCFG*)mcfg_ptr;

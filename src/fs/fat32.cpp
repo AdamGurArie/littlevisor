@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "../drivers/ahci.h"
+#include "../common.h"
 #include <bit>
 
 #define SECTOR_SIZE 512
@@ -16,11 +17,11 @@ uint32_t first_data_sector = 0;
 
 void init_fs() {
   read_from_disk((uint8_t*)&bpb_struct, 0, sizeof(BPB));
-  uint32_t num_of_sectors = bpb_struct.large_sector_count;
-  uint32_t fat_size = bpb_struct.num_of_sectors_per_fat;
+  // uint32_t num_of_sectors = bpb_struct.large_sector_count;
+  // uint32_t fat_size = bpb_struct.num_of_sectors_per_fat;
   first_data_sector = bpb_struct.num_of_reserved_sectors + (bpb_struct.num_of_fats * bpb_struct.fat32_extention.sectors_per_fat);
-  uint32_t first_fat_sector = bpb_struct.num_of_reserved_sectors;
-  uint32_t num_of_data_sectors = num_of_sectors - (bpb_struct.num_of_reserved_sectors + fat_size * bpb_struct.num_of_fats);
+  // uint32_t first_fat_sector = bpb_struct.num_of_reserved_sectors;
+  // uint32_t num_of_data_sectors = num_of_sectors - (bpb_struct.num_of_reserved_sectors + fat_size * bpb_struct.num_of_fats);
 }
 
 uint32_t cluster_to_sector(uint32_t cluster) {
@@ -35,7 +36,7 @@ uint32_t getEntryByCluster(uint32_t cluster) {
   uint8_t sector_buff[512];
   read_from_disk(sector_buff, fat_sector*SECTOR_SIZE, 1*SECTOR_SIZE);
   uint32_t fat_entry = 0;
-  memcpy((uint8_t*)&fat_entry, &sector_buff[entry_offset], sizeof(uint32_t));
+  kmemcpy((uint8_t*)&fat_entry, &sector_buff[entry_offset], sizeof(uint32_t));
   return fat_entry;
 }
 
@@ -48,7 +49,7 @@ void writeEntryByCluster(uint32_t cluster, uint32_t value) {
 }
 
 //@TODO: check if this actually needed
-void iterateChain(uint32_t* chain, uint32_t cluster) {
+/**void iterateChain(uint32_t* chain, uint32_t cluster) {
   while(1) {
     uint32_t addr_of_entry = getEntryByCluster(cluster);
     uint8_t sector_buff[SECTOR_SIZE];
@@ -59,7 +60,7 @@ void iterateChain(uint32_t* chain, uint32_t cluster) {
       break;
     }
   }
-}
+}**/
 
 FILE_DESCRIPTOR findFile(char* filename) {
   uint32_t curr_clust = 2;
@@ -71,14 +72,14 @@ FILE_DESCRIPTOR findFile(char* filename) {
 
       for(uint32_t offset = 0; offset < bpb_struct.bytes_per_sector; offset+=32) {
         FILE_DESCRIPTOR* file_desc = std::bit_cast<FILE_DESCRIPTOR*>(curr_sector + offset);
-        if(memcmp((uint8_t*)file_desc->filename, (uint8_t*)filename, 11) == 0) {
+        if(kmemcmp((uint8_t*)file_desc->filename, (uint8_t*)filename, 11) == 0) {
           return *file_desc; 
         }
       }
     }
   }
 
-  return FILE_DESCRIPTOR{0};
+  return FILE_DESCRIPTOR{};
 }
 
 void write_to_filedesc(char* filename, FILE_DESCRIPTOR fd) {
@@ -91,7 +92,7 @@ for(curr_clust = 2; curr_clust <= bpb_struct.large_sector_count; curr_clust++) {
 
       for(uint32_t offset = 0; offset < bpb_struct.bytes_per_sector; offset+=32) {
         FILE_DESCRIPTOR* file_desc = (FILE_DESCRIPTOR*)(curr_sector + offset);
-        if(memcmp((uint8_t*)file_desc->filename, (uint8_t*)filename, 11) == 0) {
+        if(kmemcmp((uint8_t*)file_desc->filename, (uint8_t*)filename, 11) == 0) {
           uint32_t position = (cluster_to_sector(curr_clust) + sector) * bpb_struct.bytes_per_sector + offset;
           write_to_disk((uint8_t*)&fd, position, sizeof(fd));
         }
@@ -152,10 +153,10 @@ void encode_name(const char* name, char* encoded_name) {
       }
     }
 
-    memcpy(encoded_name, name, dot_idx);
-    memcpy(encoded_name + 8, name + dot_idx+1, 3);
+    kmemcpy((uint8_t*)encoded_name, (uint8_t*)name, dot_idx);
+    kmemcpy((uint8_t*)(encoded_name + 8), (uint8_t*)(name + dot_idx+1), 3);
   } else if(name_type == NAME_WITHOUT_EXT) {
-    memcpy(encoded_name, name, name_len);
+    kmemcpy((uint8_t*)encoded_name, (uint8_t*)name, name_len);
   }
 
   for(uint8_t i = 0; i < 12; i++) {
@@ -166,7 +167,7 @@ void encode_name(const char* name, char* encoded_name) {
 uint8_t readFile(char* filename) {
   FILE_DESCRIPTOR file_desc = findFile(filename);
   FILE_DESCRIPTOR null_fd = {};
-  if(memcmp(&file_desc, &null_fd, sizeof(file_desc)) == 0) {
+  if(kmemcmp(&file_desc, &null_fd, sizeof(file_desc)) == 0) {
     return 1;
   }
 
@@ -232,7 +233,7 @@ void createFile(char* filename) {
     for(uint32_t i = 0; i < SECTOR_SIZE; i+=32) {
       FILE_DESCRIPTOR* curr_fd = (FILE_DESCRIPTOR*)&clust_buff[i];
       
-      if(memcmp((uint8_t*)&free_fd, (uint8_t*)curr_fd, sizeof(FILE_DESCRIPTOR)) == 0) {
+      if(kmemcmp((uint8_t*)&free_fd, (uint8_t*)curr_fd, sizeof(FILE_DESCRIPTOR)) == 0) {
         entry_pos = cluster_to_sector(curr_clust)*SECTOR_SIZE + i;
         break;
       }
@@ -242,7 +243,7 @@ void createFile(char* filename) {
   }
 
   // setup entry
-  memcpy(free_fd.filename, filename, sizeof(free_fd.filename));
+  kmemcpy((uint8_t*)free_fd.filename, (uint8_t*)filename, sizeof(free_fd.filename));
 
   uint32_t first_clust = allocate_cluster();
   free_fd.first_clust_low = first_clust & 0xFFFF;
@@ -255,7 +256,7 @@ void createFile(char* filename) {
 uint8_t writeFile(char* filename, uint8_t* buff, uint32_t size) {
   FILE_DESCRIPTOR fd = findFile(filename);
   FILE_DESCRIPTOR null_fd = {};
-  if(memcmp(&fd, &null_fd, sizeof(FILE_DESCRIPTOR)) == 0) {
+  if(kmemcmp(&fd, &null_fd, sizeof(FILE_DESCRIPTOR)) == 0) {
     return 0;
   }
   
@@ -297,12 +298,12 @@ int main() {
   encoded_name[12] = '\00';
   std::cout << encoded_name << std::endl;
   init_fs();
-  FSINFO buff{};
+  //FSINFO buff{};
   //read_from_disk((uint8_t*)&buff, 1, sizeof(FSINFO));
   //FILE_DESCRIPTOR fd = findFile(encoded_name);
   //std::cout << fd.size_in_bytes << std::endl; 
   //createFile(encoded_name);
-  memcpy(buff1, "hello world", 10);
+  kmemcpy((uint8_t*)buff1, (uint8_t*)"hello world", 10);
   writeFile(encoded_name, (uint8_t*)buff1, 10);
   readFile(encoded_name);
 }

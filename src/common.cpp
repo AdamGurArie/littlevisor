@@ -37,6 +37,24 @@ uint8_t kmemcmp(uint8_t* mem1, uint8_t* mem2, uint32_t size) {
 
   return 1;
 }
+
+uint32_t kstrlen(const char* str) {
+  uint32_t length = 0;
+  while(str[length] != '\x00') {
+    length++;
+  }
+
+  return length;
+}
+
+int ktoupper(int c) {
+  if(c > 0x60 && c < 0x7B) {
+    return c - 32;
+  }
+
+  return c;
+}
+
 //template<typename T>
 //uint8_t read_from_port_byte(uint16_t port) {
 //  uint8_t output = 0;

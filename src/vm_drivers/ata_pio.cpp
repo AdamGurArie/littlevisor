@@ -7,6 +7,74 @@
 
 #define SECTOR_SIZE 512
 
+uint16_t ata_pio_device::handle_read_register(ata_pio_base_ports port) {
+  switch(port) {
+    case DATA_REGISTER:
+      return this->registers.data_reg;
+
+    case ERROR_REGISTER:
+      return this->registers.error_reg;
+
+    case FEATURES_REGISTER:
+      return this->registers.features_reg;
+
+    case SECTOR_COUNT_REGISTER:
+      return this->registers.sec_count_reg;
+
+    case SECTOR_NUMBER_REGISTER_LBALOW:
+      return this->registers.sec_num_reg & 0xFFFF;
+
+    case CYLINDER_LOW_REGISTER_LBAMID:
+      return (this->registers.sec_num_reg << 16) & 0xFFFF;
+
+    case CYLINDER_HIGH_REGISTER_LBAHIGH:
+      return (this->registers.sec_num_reg << 24) & 0xFFFF;
+
+    case DRIVE_HEAD_REGISTER:
+      return this->registers.drive_head_reg;
+
+    case STATUS_REGISTER:
+      return this->registers.status_reg;
+
+    case COMMAND_REGISTER:
+      return this->registers.cmd_reg;
+  }
+}
+
+void ata_pio_device::handle_write_register(ata_pio_base_ports port, uint16_t data) {
+  switch(port) {
+    case DATA_REGISTER:
+      this->registers.data_reg = data;
+
+    case ERROR_REGISTER:
+      this->registers.error_reg = data;
+
+    case FEATURES_REGISTER:
+      this->registers.features_reg = data;
+
+    case SECTOR_COUNT_REGISTER:
+      this->registers.sec_count_reg = data;
+
+    case SECTOR_NUMBER_REGISTER_LBALOW:
+      this->registers.sec_num_reg = this->registers.sec_num_reg | (data & 0xFFFF);
+
+    case CYLINDER_LOW_REGISTER_LBAMID:
+      this->registers.sec_num_reg = this->registers.sec_num_reg | ((data << 16) & 0xFFFF);
+
+    case CYLINDER_HIGH_REGISTER_LBAHIGH:
+      this->registers.sec_num_reg = this->registers.sec_num_reg | ((data << 24) & 0xFFFF);
+
+    case DRIVE_HEAD_REGISTER:
+      this->registers.drive_head_reg = data;
+
+    case STATUS_REGISTER:
+      this->registers.status_reg = data;
+
+    case COMMAND_REGISTER:
+      this->registers.cmd_reg = data;
+  }
+}
+
 void ata_pio_device::dispatch_command(ide_transaction transaction) {
   // handle register IO 
   if(((transaction.exitinfo.port > 0x1F0) && (transaction.exitinfo.port < 0x1F7)) ||

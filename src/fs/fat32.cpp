@@ -102,7 +102,7 @@ for(curr_clust = 2; curr_clust <= bpb_struct.large_sector_count; curr_clust++) {
 }
 
 NAME_VALIDITY check_validity(const char* name) {
-  const uint32_t name_len = strlen(name);
+  const uint32_t name_len = kstrlen(name);
   if(name_len > 12) {
     return NAME_INVALID;
   }
@@ -137,17 +137,17 @@ void encode_name(const char* name, char* encoded_name) {
     return;
   }
 
-  uint32_t name_len = strlen(name);
+  uint32_t name_len = kstrlen(name);
   NAME_VALIDITY name_type = check_validity(name);
   if(name_type == NAME_INVALID) {
     return;
   }
 
-  memset(encoded_name, ' ', 12);
+  kmemset((uint8_t*)encoded_name, ' ', 12);
 
   if(name_type == NAME_WITH_EXT) {
     uint8_t dot_idx = 0;
-    for(uint32_t i = 0; i < strlen(name); i++) {
+    for(uint32_t i = 0; i < kstrlen(name); i++) {
       if(name[i] == '.') {
         dot_idx = i;
       }
@@ -160,19 +160,19 @@ void encode_name(const char* name, char* encoded_name) {
   }
 
   for(uint8_t i = 0; i < 12; i++) {
-    encoded_name[i] = toupper(encoded_name[i]);
+    encoded_name[i] = ktoupper((char)encoded_name[i]);
   }
 }
 
-uint8_t readFile(char* filename) {
+uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
   FILE_DESCRIPTOR file_desc = findFile(filename);
   FILE_DESCRIPTOR null_fd = {};
-  if(kmemcmp(&file_desc, &null_fd, sizeof(file_desc)) == 0) {
+  if(kmemcmp((uint8_t*)&file_desc, (uint8_t*)&null_fd, sizeof(file_desc)) == 0) {
     return 1;
   }
 
   uint8_t file_buff[file_desc.size_in_bytes];
-  memset(file_buff, 0x0, file_desc.size_in_bytes);
+  kmemset(file_buff, 0x0, file_desc.size_in_bytes);
   uint32_t fat_entry = file_desc.first_clust_low | (file_desc.first_clust_high >> 16);
   uint32_t offset = 0;
   while(fat_entry < 0x0FFFFFF8 && offset < file_desc.size_in_bytes) {
@@ -182,6 +182,8 @@ uint8_t readFile(char* filename) {
     fat_entry = getEntryByCluster(fat_entry);
     offset += size_to_read;
   }
+
+  kmemcpy(buff + pos, file_buff, size);
 
   return 0;
 }
@@ -222,12 +224,12 @@ void createFile(char* filename) {
   uint32_t curr_clust = bpb_struct.fat32_extention.fat_cluster_num_of_root;
   FILE_DESCRIPTOR free_fd = {};
   uint32_t entry_pos = 0;
-  memset((uint8_t*)&free_fd, 0x0, sizeof(FILE_DESCRIPTOR));
+  kmemset((uint8_t*)&free_fd, 0x0, sizeof(FILE_DESCRIPTOR));
 
   // find free file entry in root directory
   while(curr_clust < 0x0FFFFFF8 && entry_pos == 0) {
     uint8_t clust_buff[bpb_struct.bytes_per_sector];
-    memset(clust_buff, 0x0, bpb_struct.bytes_per_sector);
+    kmemset(clust_buff, 0x0, bpb_struct.bytes_per_sector);
     read_from_disk(clust_buff, cluster_to_sector(curr_clust)*SECTOR_SIZE, bpb_struct.bytes_per_sector);
 
     for(uint32_t i = 0; i < SECTOR_SIZE; i+=32) {
@@ -253,10 +255,12 @@ void createFile(char* filename) {
   write_to_disk((uint8_t*)&free_fd, entry_pos, sizeof(free_fd));
 }
 
-uint8_t writeFile(char* filename, uint8_t* buff, uint32_t size) {
+// TODO: add support for pos argument
+uint8_t writeFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
+  (void)pos;
   FILE_DESCRIPTOR fd = findFile(filename);
   FILE_DESCRIPTOR null_fd = {};
-  if(kmemcmp(&fd, &null_fd, sizeof(FILE_DESCRIPTOR)) == 0) {
+  if(kmemcmp((uint8_t*)&fd, (uint8_t*)&null_fd, sizeof(FILE_DESCRIPTOR)) == 0) {
     return 0;
   }
   
@@ -289,21 +293,18 @@ uint8_t writeFile(char* filename, uint8_t* buff, uint32_t size) {
   return 0;
 }
 
-int main() {
-  char buff1[50];
-  read_from_disk((uint8_t*)buff1, 0x100400, 50);
-  const char* name = "hello1.txt";
-  char encoded_name[13] = {};
-  encode_name(name, encoded_name);
-  encoded_name[12] = '\00';
-  std::cout << encoded_name << std::endl;
-  init_fs();
-  //FSINFO buff{};
-  //read_from_disk((uint8_t*)&buff, 1, sizeof(FSINFO));
-  //FILE_DESCRIPTOR fd = findFile(encoded_name);
-  //std::cout << fd.size_in_bytes << std::endl; 
-  //createFile(encoded_name);
-  kmemcpy((uint8_t*)buff1, (uint8_t*)"hello world", 10);
-  writeFile(encoded_name, (uint8_t*)buff1, 10);
-  readFile(encoded_name);
+uint32_t getFileSize(char *filename) {
+  FILE_DESCRIPTOR fd = findFile(filename);
+  FILE_DESCRIPTOR null_fd = {};
+  if(kmemcmp((uint8_t*)&fd, (uint8_t*)&null_fd, sizeof(FILE_DESCRIPTOR)) == 0) {
+    return 0;
+  }
+
+  return fd.size_in_bytes;
+}
+
+// @TODO
+bool checkFileExists(char* filename) {
+  (void)filename;
+  return true;
 }

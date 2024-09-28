@@ -145,9 +145,9 @@ void init_vm() {
   vmcb_struct->state_save_area.rsp = 0x0;
 
   // load coreboot to memory address starting with RIP
-  uint32_t fd = openFile((char*)"core_boot"); 
+  uint32_t fd = vopenFile((char*)"core_boot"); 
   //map to rip address
-  uint32_t file_size = getFileSize(fd);
+  uint32_t file_size = vgetFileSize(fd);
   uint32_t num_of_pages = file_size / 0x1000;
   uint64_t vm_mem_map = create_clean_virtual_space();
   
@@ -158,7 +158,7 @@ void init_vm() {
             0x8E,
             vm_mem_map);
 
-    readFile(fd, (char*)(vmcb_struct->state_save_area.rip + i * 0x1000), 0x1000);
+    vreadFile(fd, (char*)(vmcb_struct->state_save_area.rip + i * 0x1000), 0x1000);
   }
 
   vmcb_struct->control.n_cr3 = vm_mem_map;

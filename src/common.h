@@ -1,4 +1,5 @@
 #pragma once
+#include <cctype>
 #include <cstdint>
 #include <type_traits>
 #include <concepts>
@@ -50,12 +51,11 @@ inline bool getbit(uint64_t val, uint8_t pos) {
 }
 
 void setbit(uint64_t* val, uint8_t pos);
-
 void kmemcpy(uint8_t* dest, uint8_t* src, uint32_t size);
-
 void kmemset(uint8_t* mem, uint8_t val, uint32_t size);
-
 uint8_t kmemcmp(uint8_t* mem1, uint8_t* mem2, uint32_t size);
+uint32_t kstrlen(const char* str);
+int ktoupper(int c);
 
 inline void clearbit(uint64_t* val, uint8_t pos) {
   *val = *val & ~((uint64_t)1 << pos);

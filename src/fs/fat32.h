@@ -82,5 +82,7 @@ enum NAME_VALIDITY {
   NAME_WITHOUT_EXT,
 };
 
-uint8_t writeFile(char* filename, uint8_t* buff, uint32_t size);
-uint8_t readFile(char* filename);
+uint8_t writeFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size);
+uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size);
+uint32_t getFileSize(char* filename);
+bool checkFileExists(char* filename);

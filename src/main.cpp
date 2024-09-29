@@ -26,6 +26,13 @@ static volatile struct limine_rsdp_request rsdp_request = {
   .response = 0,
 };
 
+__attribute__((used, section(".requests")))
+static volatile struct limine_module_request module_request {
+  .id = LIMINE_MODULE_REQUEST,
+  .revision = 0,
+  .response = 0,
+};
+
 __attribute__((used, section(".requests_start_marker")))
 static volatile LIMINE_REQUESTS_START_MARKER;
 
@@ -46,28 +53,6 @@ void _start() {
   MCFG* mcfg = get_mcfg();
   init_pci((uint64_t)mcfg);
   init_ahci();
-  //uint8_t read_buff[512] = {};
-  //kmemset(read_buff, 0x1, 512);
-  //write_to_disk(read_buff, 0, 512);
-  //kmemset(read_buff, 0x0, 512);
-  //read_from_disk(read_buff, 0, 512);
-  uint8_t* write_buff = (uint8_t*)0x100000;
-  kmemset(TO_HIGHER_HALF(write_buff), 0x1, 512);
-  //commit_transaction((uint8_t*)0x2000, 0, 1, true);
-  //kmemset(TO_HIGHER_HALF(write_buff), 0x0, 512);
-  commit_transaction((uint8_t*)write_buff, 0, 1, true);
-  //uint64_t vmxon_region = kpalloc();
-  //enable_vmx(vmxon_region);
-  init_vm();
-  uint32_t size = sizeof(vmcb_control);
-  (void)size;
-  //write_to_port(0xe9, a);
-  while(true);
-  //uint8_t a[] = "hello";
-  //while(true) {
-  
-  //  write_to_port(0xe9, (uint8_t)'r');
-  //}
-  //asm volatile("hlt");
-  //while(true);
+  limine_file* limine_f = module_request.response->modules[0];
+  limine_f->address;
 }

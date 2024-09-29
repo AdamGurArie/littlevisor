@@ -6,7 +6,8 @@
 #include <iostream>
 #include <cstring>
 
-#include "../drivers/ahci.h"
+// #include "../drivers/ahci.h"
+#include "../drivers/ram_disk.h"
 #include "../common.h"
 #include <bit>
 

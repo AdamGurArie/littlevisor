@@ -3,7 +3,7 @@ BUILD_DIR = build
 LINKER_FILE = linker.ld
 OUTPUT := $(BUILD_DIR)/kernel.elf
 ISO := $(BUILD_DIR)/kernel.iso
-COMPILATION_FLAGS := -g -Wall -Wextra -pipe -fno-stack-protector -mno-red-zone -fpermissive -nostdlib -std=c++20 $(INCLUDE_PATH)
+COMPILATION_FLAGS := -g -Wall -Wextra -pipe -fno-stack-protector -mno-red-zone -Waddress-of-packed-member -fpermissive -nostdlib -std=c++20 $(INCLUDE_PATH)
 
 LDFLAGS ?= -nostd $(INCLUDE_PATH)
 
@@ -42,15 +42,12 @@ OBJECT_FILES = $(ASM_OBJECT_FILES) $(CPP_OBJECT_FILES)
 build-iso: $(ISO)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@echo $(OBJECT_FILES)
-	@echo $(SRC_FILES)
-	@echo "Building $<"
-	@mkdir -p $(dir $@)
-	@g++ $(COMPILATION_FLAGS) -c $< -o $@
+	mkdir -p $(dir $@)
+	g++ $(COMPILATION_FLAGS) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.s
 	@mkdir -p $(dir $@)
-	nasm -felf64 -F dwarf -g -o $@ $<
+	@nasm -felf64 -F dwarf -g -o $@ $<
 
 $(OUTPUT): $(OBJECT_FILES)
 	@mkdir -p $(BUILD_DIR)
@@ -71,10 +68,13 @@ $(ISO): $(OUTPUT) limine
 		-efi-boot-part --efi-boot-image --protective-msdos-label \
 		iso_root -o $(ISO)
 	./limine/limine bios-install $(ISO)
-	qemu-system-x86_64 -debugcon stdio -cdrom $(ISO) -boot d -no-reboot -no-shutdown 
+	qemu-system-x86_64 -M q35 -debugcon stdio -cdrom $(ISO) -boot d -no-reboot -no-shutdown 
 
 debug:
-	qemu-system-x86_64 -cdrom $(ISO) -debugcon stdio -boot d -no-reboot -no-shutdown -s -S
+	qemu-system-x86_64 -M q35 -cdrom $(ISO) \
+	-drive id=disk,file=test_image.img,format=raw,if=none \
+	-device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 \
+	-trace ahci* -S -d int -debugcon stdio -boot d -no-reboot -no-shutdown -s -S
 
 clean:
 	@rm -rf $(BUILD_DIR)

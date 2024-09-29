@@ -49,4 +49,11 @@ SECTIONS
     *(.note .note.*)
     *(.interp)
    }
+
+   . = 0x6000000;
+
+   .fs_data_section :
+   {
+    KEEP(*(.data))
+   }
 }

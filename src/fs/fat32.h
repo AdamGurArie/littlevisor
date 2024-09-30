@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include "../drivers/storage_device.h"
 
 struct FAT32 {
   uint32_t sectors_per_fat;
@@ -82,6 +83,7 @@ enum NAME_VALIDITY {
   NAME_WITHOUT_EXT,
 };
 
+void init_fs(storage_device* storage_dev);
 uint8_t writeFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size);
 uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size);
 uint32_t getFileSize(char* filename);

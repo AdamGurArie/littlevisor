@@ -1,23 +1,30 @@
 #include "fat32.h"
+#include "../kheap.h"
 
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <cstring>
+#include <math.h>
 
 // #include "../drivers/ahci.h"
 #include "../drivers/ram_disk.h"
 #include "../common.h"
 #include <bit>
+#include <sys/types.h>
 
 #define SECTOR_SIZE 512
 
+//@TODO: replace all variable-size arrays(those are illegal in cpp)
+
 BPB bpb_struct;
 uint32_t first_data_sector = 0;
+storage_device* storage_dev = 0;
 
-void init_fs() {
-  read_from_disk((uint8_t*)&bpb_struct, 0, sizeof(BPB));
+void init_fs(storage_device* storage_dev) {
+  storage_dev = storage_dev;
+  storage_dev->read_data((uint8_t*)&bpb_struct, 0, sizeof(BPB));
   // uint32_t num_of_sectors = bpb_struct.large_sector_count;
   // uint32_t fat_size = bpb_struct.num_of_sectors_per_fat;
   first_data_sector = bpb_struct.num_of_reserved_sectors + (bpb_struct.num_of_fats * bpb_struct.fat32_extention.sectors_per_fat);
@@ -34,8 +41,8 @@ uint32_t getEntryByCluster(uint32_t cluster) {
   cluster *= 4;
   uint32_t fat_sector = bpb_struct.num_of_reserved_sectors + (cluster / SECTOR_SIZE);
   uint32_t entry_offset = cluster % SECTOR_SIZE;
-  uint8_t sector_buff[512];
-  read_from_disk(sector_buff, fat_sector*SECTOR_SIZE, 1*SECTOR_SIZE);
+  uint8_t* sector_buff = (uint8_t*)kmalloc(storage_dev->get_sector_size());
+  storage_dev->read_sector(sector_buff, fat_sector*SECTOR_SIZE, storage_dev->get_sector_size());
   uint32_t fat_entry = 0;
   kmemcpy((uint8_t*)&fat_entry, &sector_buff[entry_offset], sizeof(uint32_t));
   return fat_entry;
@@ -46,7 +53,7 @@ void writeEntryByCluster(uint32_t cluster, uint32_t value) {
   uint32_t fat_sector = bpb_struct.num_of_reserved_sectors + (cluster / SECTOR_SIZE);
   uint32_t entry_offset = cluster % SECTOR_SIZE;
   uint32_t entry_pos = fat_sector*bpb_struct.bytes_per_sector + entry_offset;
-  write_to_disk((uint8_t*)&value, entry_pos, sizeof(value));
+  storage_dev->write_data((uint8_t*)&value, entry_pos, sizeof(value));
 }
 
 //@TODO: check if this actually needed
@@ -69,7 +76,7 @@ FILE_DESCRIPTOR findFile(char* filename) {
     for(uint32_t sector = 0; sector < bpb_struct.sectors_per_clusted; sector++) {
       uint32_t curr_sector_num = cluster_to_sector(curr_clust);
       uint8_t curr_sector[bpb_struct.bytes_per_sector];
-      read_from_disk(curr_sector, curr_sector_num*SECTOR_SIZE, 1*SECTOR_SIZE);
+      storage_dev->read_data(curr_sector, curr_sector_num*SECTOR_SIZE, 1*SECTOR_SIZE);
 
       for(uint32_t offset = 0; offset < bpb_struct.bytes_per_sector; offset+=32) {
         FILE_DESCRIPTOR* file_desc = std::bit_cast<FILE_DESCRIPTOR*>(curr_sector + offset);
@@ -89,13 +96,13 @@ for(curr_clust = 2; curr_clust <= bpb_struct.large_sector_count; curr_clust++) {
     for(uint32_t sector = 0; sector < bpb_struct.sectors_per_clusted; sector++) {
       uint32_t curr_sector_num = cluster_to_sector(curr_clust);
       uint8_t curr_sector[bpb_struct.bytes_per_sector];
-      read_from_disk(curr_sector, curr_sector_num*SECTOR_SIZE, 1*SECTOR_SIZE);
+      storage_dev->read_data(curr_sector, curr_sector_num*SECTOR_SIZE, 1*SECTOR_SIZE);
 
       for(uint32_t offset = 0; offset < bpb_struct.bytes_per_sector; offset+=32) {
         FILE_DESCRIPTOR* file_desc = (FILE_DESCRIPTOR*)(curr_sector + offset);
         if(kmemcmp((uint8_t*)file_desc->filename, (uint8_t*)filename, 11) == 0) {
           uint32_t position = (cluster_to_sector(curr_clust) + sector) * bpb_struct.bytes_per_sector + offset;
-          write_to_disk((uint8_t*)&fd, position, sizeof(fd));
+          storage_dev->write_data((uint8_t*)&fd, position, sizeof(fd));
         }
       }
     }
@@ -179,7 +186,7 @@ uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
   while(fat_entry < 0x0FFFFFF8 && offset < file_desc.size_in_bytes) {
     uint32_t sector = cluster_to_sector(fat_entry);
     uint32_t size_to_read = file_desc.size_in_bytes - offset > 512 ? 512 : file_desc.size_in_bytes - offset;
-    read_from_disk(file_buff + offset, sector*SECTOR_SIZE + offset, size_to_read);
+    storage_dev->read_data(file_buff + offset, sector*SECTOR_SIZE + offset, size_to_read);
     fat_entry = getEntryByCluster(fat_entry);
     offset += size_to_read;
   }
@@ -231,7 +238,7 @@ void createFile(char* filename) {
   while(curr_clust < 0x0FFFFFF8 && entry_pos == 0) {
     uint8_t clust_buff[bpb_struct.bytes_per_sector];
     kmemset(clust_buff, 0x0, bpb_struct.bytes_per_sector);
-    read_from_disk(clust_buff, cluster_to_sector(curr_clust)*SECTOR_SIZE, bpb_struct.bytes_per_sector);
+    storage_dev->read_data(clust_buff, cluster_to_sector(curr_clust)*SECTOR_SIZE, bpb_struct.bytes_per_sector);
 
     for(uint32_t i = 0; i < SECTOR_SIZE; i+=32) {
       FILE_DESCRIPTOR* curr_fd = (FILE_DESCRIPTOR*)&clust_buff[i];
@@ -253,7 +260,7 @@ void createFile(char* filename) {
   free_fd.first_clust_high = (first_clust >> 16) & 0xFFFF;
   
   // write entry to disk
-  write_to_disk((uint8_t*)&free_fd, entry_pos, sizeof(free_fd));
+  storage_dev->read_data((uint8_t*)&free_fd, entry_pos, sizeof(free_fd));
 }
 
 // TODO: add support for pos argument
@@ -274,7 +281,7 @@ uint8_t writeFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
     uint32_t remaining_clust_size = (bpb_struct.bytes_per_sector*bpb_struct.sectors_per_clusted) - fd.size_in_bytes % 512;
     uint32_t size_to_write = size > remaining_clust_size ? remaining_clust_size : size;
     uint32_t position = cluster_to_sector(last_file_cluster)*bpb_struct.bytes_per_sector + fd.size_in_bytes % 512; 
-    write_to_disk(buff, position, size_to_write);
+    storage_dev->write_data(buff, position, size_to_write);
     remaining_size -= size_to_write;
     offset += size_to_write;
   }
@@ -283,7 +290,7 @@ uint8_t writeFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
   while(remaining_size > 0) {
     uint32_t new_clust = allocate_cluster();
     uint32_t size_to_write = remaining_size > bpb_struct.bytes_per_sector*bpb_struct.sectors_per_clusted ? bpb_struct.bytes_per_sector*bpb_struct.sectors_per_clusted : remaining_size;
-    write_to_disk(buff+offset, cluster_to_sector(new_clust), size_to_write);
+    storage_dev->write_data(buff+offset, cluster_to_sector(new_clust), size_to_write);
     link_clusters(last_file_cluster, new_clust);
     last_file_cluster = new_clust;
     remaining_size -= size_to_write;

@@ -1,9 +1,11 @@
+#include "drivers/ram_disk.h"
 #include  "limine.h"
 #include "common.h"
 #include "vmcs/vmcs.h"
 #include "drivers/acpi.h"
 #include "drivers/pci.h"
-#include "drivers/ahci.h"
+//#include "drivers/ahci.h"
+#include "drivers/ram_disk.h"
 #include <cstdint>
 #include <cstring>
 #include "pmm.h"
@@ -52,7 +54,9 @@ void _start() {
   init_acpi((uint64_t)rsdp_request.response->address);
   MCFG* mcfg = get_mcfg();
   init_pci((uint64_t)mcfg);
-  init_ahci();
+  // init_ahci();
   limine_file* limine_f = module_request.response->modules[0];
-  limine_f->address;
+  ramDisk ramdisk = ramDisk((uintptr_t)limine_f->address);
+  uint8_t buff[512];
+  ramdisk.read_sector(buff, 0, 1);
 }

@@ -34,9 +34,9 @@
 #define ATA_CMD_WRITE_DMA_EX    0x35
 #define ATA_CMD_IDENTIFY        0xec
 
-static hba_mem_regs* ahci_hba = 0;
-static port_type port_types[32] = {};
-static uint32_t sata_device_port = 0;
+// static hba_mem_regs* ahci_hba = 0;
+// static port_type port_types[32] = {};
+// static uint32_t sata_device_port = 0;
 
 void init_port(uint32_t port);
 void map_ports();
@@ -46,7 +46,15 @@ void start_command_engine(uint32_t port);
 
 void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_sectors, bool write);
 
-void init_ahci() {
+uint64_t ahci::get_sector_size() {
+  return SECTOR_SIZE;
+}
+
+ahci::ahci() {
+  init_ahci();
+}
+
+void ahci::init_ahci() {
   common_pci_header* ahci_common_header = find_device(AHCI_CLASS, AHCI_SUBCLASS, PROG_IF);
   if(ahci_common_header->header_type != 0x0) {
     //panic
@@ -74,7 +82,15 @@ void init_ahci() {
   }
 }
 
-void init_port(uint32_t port) {
+uint8_t ahci::read_data(uint8_t* buff, uint64_t offset, uint32_t size) {
+  return 0;
+}
+
+uint8_t ahci::write_data(uint8_t* buff, uint64_t offset, uint32_t size) {
+  return 0;
+}
+
+void ahci::init_port(uint32_t port) {
   if(port > 31) {
     return;
   }
@@ -129,7 +145,7 @@ void init_port(uint32_t port) {
   start_command_engine(port);
 }
 
-void stop_command_engine(uint32_t port) {
+void ahci::stop_command_engine(uint32_t port) {
   if(port > 31) {
     return;
   }
@@ -160,7 +176,7 @@ void stop_command_engine(uint32_t port) {
   // clear pxsctl.det
 }
 
-void map_ports() {
+void ahci::map_ports() {
   uint32_t ports_available = ahci_hba->generic_host_control.pi;
   for(uint32_t i = 0; i < 32; i++) {
     port_register_struct* port_reg = &ahci_hba->port_registers[i];
@@ -180,7 +196,7 @@ void map_ports() {
   }
 }
 
-void start_command_engine(uint32_t port) {
+void ahci::start_command_engine(uint32_t port) {
   if(port > 31) {
     return;
   }
@@ -197,7 +213,7 @@ void start_command_engine(uint32_t port) {
   port_reg->pxcmd = reg;
 }
 
-void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_sectors, bool write) {
+void ahci::commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_sectors, bool write) {
   port_register_struct* port_reg = &ahci_hba->port_registers[sata_device_port];
   // find available command slot
   uint64_t pxsact = port_reg->pxsact;
@@ -258,7 +274,7 @@ void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_se
   while((port_reg->pxci & (1<<cmd_slot)) == 1);
 }
 
-void read_from_disk(uint8_t* buff, uint64_t start_sector, uint16_t size) {
+void ahci::read_from_disk(uint8_t* buff, uint64_t start_sector, uint16_t size) {
   uint16_t real_size = size / 512;
   uint8_t wrap_buff[real_size*512];
   kmemset(wrap_buff, 0x0, sizeof(wrap_buff));
@@ -266,9 +282,10 @@ void read_from_disk(uint8_t* buff, uint64_t start_sector, uint16_t size) {
   kmemcpy(buff, wrap_buff, size);
 }
 
-void write_to_disk(uint8_t* buff, uint64_t start_sector, uint16_t size) {
+void ahci::write_to_disk(uint8_t* buff, uint64_t start_sector, uint16_t size) {
   uint16_t real_size = size / 512;
   //kmemcpy(wrap_buff, buff, size);
   commit_transaction(buff, start_sector, real_size, true);
   //kmemcpy(buff, wrap_buff, size);
 }
+

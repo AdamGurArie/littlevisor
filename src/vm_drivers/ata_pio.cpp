@@ -230,7 +230,7 @@ void ata_pio_device::handle_read_sectors() {
   uint32_t sector_size = this->storage_dev->get_sector_size();
 
   for(uint32_t i = 0; i < this->registers.sec_num_reg; i++) {
-    storage_dev->read_sector(sector + i, &this->transfer_buff[offset]);
+    storage_dev->read_sector(&this->transfer_buff[offset], sector + i, 1);
     offset += sector_size;
   }
 }
@@ -241,7 +241,7 @@ void ata_pio_device::handle_write_sectors() {
   uint32_t sector_size = this->storage_dev->get_sector_size();
 
   for(uint32_t i = 0; i < this->registers.sec_num_reg; i++) {
-    storage_dev->write_sector(sector + i, &this->transfer_buff[offset]);
+    storage_dev->write_sector(&this->transfer_buff[offset], sector + i, 1);
     offset += sector_size;
   }
 }

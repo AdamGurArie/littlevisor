@@ -39,39 +39,51 @@ uint16_t ata_pio_device::handle_read_register(ata_pio_base_ports port) {
     case COMMAND_REGISTER:
       return this->registers.cmd_reg;
   }
+
+  return 0;
 }
 
 void ata_pio_device::handle_write_register(ata_pio_base_ports port, uint16_t data) {
   switch(port) {
     case DATA_REGISTER:
       this->registers.data_reg = data;
+      return;
 
     case ERROR_REGISTER:
       this->registers.error_reg = data;
+      return;
 
     case FEATURES_REGISTER:
       this->registers.features_reg = data;
+      return;
 
     case SECTOR_COUNT_REGISTER:
       this->registers.sec_count_reg = data;
+      return;
 
     case SECTOR_NUMBER_REGISTER_LBALOW:
       this->registers.sec_num_reg = this->registers.sec_num_reg | (data & 0xFFFF);
+      return;
 
     case CYLINDER_LOW_REGISTER_LBAMID:
       this->registers.sec_num_reg = this->registers.sec_num_reg | ((data << 16) & 0xFFFF);
+      return;
 
     case CYLINDER_HIGH_REGISTER_LBAHIGH:
       this->registers.sec_num_reg = this->registers.sec_num_reg | ((data << 24) & 0xFFFF);
+      return;
 
     case DRIVE_HEAD_REGISTER:
       this->registers.drive_head_reg = data;
+      return;
 
     case STATUS_REGISTER:
       this->registers.status_reg = data;
+      return;
 
     case COMMAND_REGISTER:
       this->registers.cmd_reg = data;
+      return;
   }
 }
 

@@ -38,7 +38,7 @@
 // static port_type port_types[32] = {};
 // static uint32_t sata_device_port = 0;
 
-void init_port(uint32_t port);
+/*void init_port(uint32_t port);
 void map_ports();
 
 void stop_command_engine(uint32_t port);
@@ -122,7 +122,7 @@ void ahci::init_port(uint32_t port) {
   setbit((uint64_t*)&reg, HBA_PxCMD_FRE_OFF);
   port_reg->pxcmd = reg;
   // initiate a spin up(set pxcmd.sud 1)
-
+*/
   /**reg = port_reg->pxcmd;
   setbit((uint64_t*)&reg, HBA_PxCMD_SUD_OFF);
   port_reg->pxcmd = reg;
@@ -142,9 +142,9 @@ void ahci::init_port(uint32_t port) {
     reg = port_reg->pxtfd;
   }**/
 
-  start_command_engine(port);
-}
-
+  //start_command_engine(port);
+//}
+/*
 void ahci::stop_command_engine(uint32_t port) {
   if(port > 31) {
     return;
@@ -274,7 +274,7 @@ void ahci::commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num
   while((port_reg->pxci & (1<<cmd_slot)) == 1);
 }
 
-void ahci::read_from_disk(uint8_t* buff, uint64_t start_sector, uint16_t size) {
+uint8_t ahci::read_sector(uint8_t* buff, uint64_t start_sector, uint16_t size) {
   uint16_t real_size = size / 512;
   uint8_t wrap_buff[real_size*512];
   kmemset(wrap_buff, 0x0, sizeof(wrap_buff));
@@ -282,10 +282,10 @@ void ahci::read_from_disk(uint8_t* buff, uint64_t start_sector, uint16_t size) {
   kmemcpy(buff, wrap_buff, size);
 }
 
-void ahci::write_to_disk(uint8_t* buff, uint64_t start_sector, uint16_t size) {
+uint8_t ahci::write_sector(uint8_t* buff, uint64_t start_sector, uint16_t size) {
   uint16_t real_size = size / 512;
   //kmemcpy(wrap_buff, buff, size);
   commit_transaction(buff, start_sector, real_size, true);
   //kmemcpy(buff, wrap_buff, size);
 }
-
+*/

@@ -2,12 +2,13 @@
 #include <cstdint>
 #include <sys/types.h>
 #include "../common.h"
+#include "../kheap.h"
 
 // static uintptr_t disk_addr = 0;
 // static uint32_t sector_size = 512;
 
 void ramDisk::init_ramdisk(uintptr_t disk_addr) {
-  disk_addr = disk_addr;
+  this->disk_addr = disk_addr;
 }
 
 uint8_t ramDisk::read_sector(uint8_t* buff, uint64_t start_sector, uint16_t size) {

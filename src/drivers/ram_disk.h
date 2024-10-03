@@ -1,9 +1,10 @@
 #pragma once
 
 #include "storage_device.h"
+#include "../kheap.h"
 #include <cstdint>
 
-class ramDisk : storage_device {
+class ramDisk {
   private:
   uintptr_t disk_addr = 0;
   uint32_t sector_size = 512;
@@ -20,7 +21,18 @@ class ramDisk : storage_device {
   uint8_t write_data(uint8_t* buff, uint64_t offset, uint32_t size);
   void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_sectors, bool write);
   uint64_t get_sector_size();
+
+  void* operator new(uint64_t size) {
+    return kmalloc(size);
+  }
+
+  void operator delete(void* p, uint64_t param) noexcept {
+    (void)param;
+    kfree(p);
+  }
+
   ramDisk(uintptr_t ramdisk_addr);
+  ~ramDisk() = default;
 };
 
 // void init_ramdisk(uintptr_t disk_addr);

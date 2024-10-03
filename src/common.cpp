@@ -1,4 +1,5 @@
 #include "common.h"
+#include "kheap.h"
 #include <cstdint>
 
 //template<typename T>
@@ -64,3 +65,15 @@ int ktoupper(int c) {
 
 //template void write_to_port<uint8_t>(uint16_t port, uint8_t data); 
 
+void* operator new(std::size_t size) {
+  return kmalloc(size); 
+}
+
+void operator delete(void* p) noexcept {
+  kfree(p);
+}
+
+void operator delete(void* p, uint64_t param) noexcept {
+  (void)param;
+  kfree(p);
+}

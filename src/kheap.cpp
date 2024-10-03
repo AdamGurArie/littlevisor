@@ -1,5 +1,6 @@
 #include "kheap.h"
 #include <cstdint>
+#include "common.h"
 #include "pmm.h"
 
 enum CHUNK_STATE {
@@ -18,7 +19,7 @@ static FREELIST_CHUNK* last_free_chunk;
 static void checkConsolidate(FREELIST_CHUNK* chunk);
 
 void init_heap() {
-  uint64_t heap_space = kpalloc_contignious(4);
+  uint64_t heap_space = TO_HIGHER_HALF(kpalloc_contignious(4));
   if(heap_space == 0) {
     // need to create a mechanism like kpanic() for such cases
     return;
@@ -29,7 +30,7 @@ void init_heap() {
   last_free_chunk = first_chunk;
 }
 
-void* kmalloc(uint32_t size) {
+void* kmalloc(uint64_t size) {
   uint64_t remaining_size = (uint64_t)last_free_chunk->next_chunk - (uint64_t)last_free_chunk;
   if (size + sizeof(FREELIST_CHUNK) > remaining_size) {
     return 0;
@@ -45,7 +46,7 @@ void* kmalloc(uint32_t size) {
   return (void*)chunk_addr;
 }
 
-void free(void* addr) {
+void kfree(void* addr) {
   FREELIST_CHUNK* curr_chunk = first_chunk;
   while(curr_chunk != (FREELIST_CHUNK*)0x0) {
 

@@ -1,4 +1,6 @@
 #include "drivers/ram_disk.h"
+#include "fs/fat32.h"
+#include "kheap.h"
 #include  "limine.h"
 #include "common.h"
 #include "vmcs/vmcs.h"
@@ -33,6 +35,8 @@ static volatile struct limine_module_request module_request {
   .id = LIMINE_MODULE_REQUEST,
   .revision = 0,
   .response = 0,
+  .internal_module_count = 0,
+  .internal_modules = 0
 };
 
 __attribute__((used, section(".requests_start_marker")))
@@ -54,9 +58,13 @@ void _start() {
   init_acpi((uint64_t)rsdp_request.response->address);
   MCFG* mcfg = get_mcfg();
   init_pci((uint64_t)mcfg);
+  init_heap(); 
   // init_ahci();
   limine_file* limine_f = module_request.response->modules[0];
-  ramDisk ramdisk = ramDisk((uintptr_t)limine_f->address);
-  uint8_t buff[512];
-  ramdisk.read_sector(buff, 0, 1);
+  ramDisk* ramdisk = new ramDisk((uintptr_t)limine_f->address);
+  init_fs(ramdisk);
+  const char* file_name = "vm_test.bin";
+  getFileSize(file_name);
+  //uint8_t buff[512];
+  //ramdisk.read_sector(buff, 0, 1);
 }

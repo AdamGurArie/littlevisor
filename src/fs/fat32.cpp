@@ -18,12 +18,12 @@
 
 //@TODO: replace all variable-size arrays(those are illegal in cpp)
 
-BPB bpb_struct;
-uint32_t first_data_sector = 0;
-storage_device* storage_dev = 0;
+static BPB bpb_struct = {0};
+static uint32_t first_data_sector = 0;
+static ramDisk* storage_dev = 0;
 
-void init_fs(storage_device* storage_dev) {
-  storage_dev = storage_dev;
+void init_fs(ramDisk* storage) {
+  storage_dev = storage;
   storage_dev->read_data((uint8_t*)&bpb_struct, 0, sizeof(BPB));
   // uint32_t num_of_sectors = bpb_struct.large_sector_count;
   // uint32_t fat_size = bpb_struct.num_of_sectors_per_fat;
@@ -70,7 +70,7 @@ void writeEntryByCluster(uint32_t cluster, uint32_t value) {
   }
 }**/
 
-FILE_DESCRIPTOR findFile(char* filename) {
+FILE_DESCRIPTOR findFile(const char* filename) {
   uint32_t curr_clust = 2;
   for(curr_clust = 2; curr_clust <= bpb_struct.large_sector_count; curr_clust++) {
     for(uint32_t sector = 0; sector < bpb_struct.sectors_per_clusted; sector++) {
@@ -301,7 +301,7 @@ uint8_t writeFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
   return 0;
 }
 
-uint32_t getFileSize(char *filename) {
+uint32_t getFileSize(const char *filename) {
   FILE_DESCRIPTOR fd = findFile(filename);
   FILE_DESCRIPTOR null_fd = {};
   if(kmemcmp((uint8_t*)&fd, (uint8_t*)&null_fd, sizeof(FILE_DESCRIPTOR)) == 0) {
@@ -312,7 +312,7 @@ uint32_t getFileSize(char *filename) {
 }
 
 // @TODO
-bool checkFileExists(char* filename) {
+bool checkFileExists(const char* filename) {
   (void)filename;
   return true;
 }

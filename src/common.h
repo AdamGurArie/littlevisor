@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <type_traits>
 #include <concepts>
+#include <cstdint>
 
 #define TO_HIGHER_HALF(addr) \
   (addr + 0xffff800000000000)
@@ -68,5 +69,9 @@ inline void setbit(uint64_t* val, uint8_t pos) {
 inline uint8_t getbit(uint64_t* val, uint8_t pos) {
   return (*val >> pos) & (uint64_t)1;
 }
+
+void* operator new(std::size_t size);
+void operator delete(void* p) noexcept;
+void operator delete(void* p, uint64_t param) noexcept;
 //template<acceptable_types T>
 //T read_from_port(uint16_t port);

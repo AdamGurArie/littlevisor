@@ -3,6 +3,7 @@
 #include "pci.h"
 #include "storage_device.h"
 #include <cstdint>
+#include <sys/types.h>
 
 enum port_type {
   PORT_NOT_AVAILABLE = 0,
@@ -143,7 +144,7 @@ struct FIS_REG_D2H {
   uint8_t rsv4[4];
 } __attribute__((packed));
 
-class ahci : storage_device{
+/*class ahci : storage_device{
 private:
   hba_mem_regs* ahci_hba = 0;
   port_type port_types[32] = {};
@@ -160,14 +161,15 @@ private:
   void start_command_engine(uint32_t port);
 
 public: 
-  void read_from_disk(uint8_t* buff, uint64_t start_sector, uint16_t size);
-  void write_to_disk(uint8_t* buff, uint64_t start_sector, uint16_t size);
+  uint8_t read_sector(uint8_t* buff, uint64_t start_sector, uint16_t size);
+  uint8_t write_sector(uint8_t* buff, uint64_t start_sector, uint16_t size);
   uint8_t read_data(uint8_t* buff, uint64_t offset, uint32_t size);
   uint8_t write_data(uint8_t* buff, uint64_t offset, uint32_t size);
   void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_sectors, bool write);
   uint64_t get_sector_size();
   ahci();
-};
+  ~ahci() = default;
+};*/
 
 // void init_ahci();
 // void read_from_disk(uint8_t* buff, uint64_t start_sector, uint16_t size);

@@ -17,7 +17,7 @@ void print_to_serial(uint8_t* text, int size) {
 //  *val = *val | ((uint64_t)1 << pos);
 //}
 
-void kmemcpy(uint8_t* dest, uint8_t* src, uint32_t size) {
+void kmemcpy(uint8_t* dest, const uint8_t* src, uint32_t size) {
   for(uint32_t i = 0; i < size; i++) {
     dest[i] = src[i];
   }
@@ -32,11 +32,11 @@ void kmemset(uint8_t* mem, uint8_t val, uint32_t size) {
 uint8_t kmemcmp(uint8_t* mem1, uint8_t* mem2, uint32_t size) {
   for(uint32_t i = 0; i < size; i++) {
     if(mem1[i] != mem2[i]) {
-      return 0;
+      return 1;
     }
   }
 
-  return 1;
+  return 0;
 }
 
 uint32_t kstrlen(const char* str) {

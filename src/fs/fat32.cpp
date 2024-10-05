@@ -18,9 +18,11 @@
 
 //@TODO: replace all variable-size arrays(those are illegal in cpp)
 
-static BPB bpb_struct = {0};
+static BPB bpb_struct = {};
 static uint32_t first_data_sector = 0;
 static ramDisk* storage_dev = 0;
+
+void encode_name(const char* name, char* encoded_name);
 
 void init_fs(ramDisk* storage) {
   storage_dev = storage;
@@ -72,6 +74,11 @@ void writeEntryByCluster(uint32_t cluster, uint32_t value) {
 
 FILE_DESCRIPTOR findFile(const char* filename) {
   uint32_t curr_clust = 2;
+  FILE_DESCRIPTOR fd;
+  char encoded_filename[12];
+  kmemset((uint8_t*)&fd, 0x0, sizeof(FILE_DESCRIPTOR));
+  encode_name(filename, encoded_filename);
+
   for(curr_clust = 2; curr_clust <= bpb_struct.large_sector_count; curr_clust++) {
     for(uint32_t sector = 0; sector < bpb_struct.sectors_per_clusted; sector++) {
       uint32_t curr_sector_num = cluster_to_sector(curr_clust);
@@ -80,14 +87,14 @@ FILE_DESCRIPTOR findFile(const char* filename) {
 
       for(uint32_t offset = 0; offset < bpb_struct.bytes_per_sector; offset+=32) {
         FILE_DESCRIPTOR* file_desc = std::bit_cast<FILE_DESCRIPTOR*>(curr_sector + offset);
-        if(kmemcmp((uint8_t*)file_desc->filename, (uint8_t*)filename, 11) == 0) {
+        if(kmemcmp((uint8_t*)file_desc->filename, (uint8_t*)encoded_filename, 11) == 0) {
           return *file_desc; 
         }
       }
     }
   }
 
-  return FILE_DESCRIPTOR{};
+  return fd;
 }
 
 void write_to_filedesc(char* filename, FILE_DESCRIPTOR fd) {
@@ -174,7 +181,8 @@ void encode_name(const char* name, char* encoded_name) {
 
 uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
   FILE_DESCRIPTOR file_desc = findFile(filename);
-  FILE_DESCRIPTOR null_fd = {};
+  FILE_DESCRIPTOR null_fd;
+  kmemset((uint8_t*)&null_fd, 0x0, sizeof(FILE_DESCRIPTOR));
   if(kmemcmp((uint8_t*)&file_desc, (uint8_t*)&null_fd, sizeof(file_desc)) == 0) {
     return 1;
   }
@@ -230,7 +238,7 @@ uint32_t get_last_cluster(uint32_t clust) {
 
 void createFile(char* filename) {
   uint32_t curr_clust = bpb_struct.fat32_extention.fat_cluster_num_of_root;
-  FILE_DESCRIPTOR free_fd = {};
+  FILE_DESCRIPTOR free_fd;
   uint32_t entry_pos = 0;
   kmemset((uint8_t*)&free_fd, 0x0, sizeof(FILE_DESCRIPTOR));
 
@@ -267,7 +275,8 @@ void createFile(char* filename) {
 uint8_t writeFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
   (void)pos;
   FILE_DESCRIPTOR fd = findFile(filename);
-  FILE_DESCRIPTOR null_fd = {};
+  FILE_DESCRIPTOR null_fd;
+  kmemset((uint8_t*)&null_fd, 0x0, sizeof(FILE_DESCRIPTOR));
   if(kmemcmp((uint8_t*)&fd, (uint8_t*)&null_fd, sizeof(FILE_DESCRIPTOR)) == 0) {
     return 0;
   }
@@ -303,8 +312,9 @@ uint8_t writeFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
 
 uint32_t getFileSize(const char *filename) {
   FILE_DESCRIPTOR fd = findFile(filename);
-  FILE_DESCRIPTOR null_fd = {};
-  if(kmemcmp((uint8_t*)&fd, (uint8_t*)&null_fd, sizeof(FILE_DESCRIPTOR)) == 0) {
+  FILE_DESCRIPTOR null_fd;
+  kmemset((uint8_t*)&null_fd, 0x0, sizeof(FILE_DESCRIPTOR));
+  if(!kmemcmp((uint8_t*)&fd, (uint8_t*)&null_fd, sizeof(FILE_DESCRIPTOR))) {
     return 0;
   }
 
@@ -313,6 +323,13 @@ uint32_t getFileSize(const char *filename) {
 
 // @TODO
 bool checkFileExists(const char* filename) {
-  (void)filename;
+  FILE_DESCRIPTOR fd = findFile(filename);
+  FILE_DESCRIPTOR null_fd;
+  kmemset((uint8_t*)&null_fd, 0x0, sizeof(FILE_DESCRIPTOR));
+
+  if(!kmemcmp((uint8_t*)&fd, (uint8_t*)&null_fd, sizeof(FILE_DESCRIPTOR))) {
+    return false;
+  }
+
   return true;
 }

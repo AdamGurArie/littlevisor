@@ -325,7 +325,7 @@ enum VMEXIT_EXITCODE
 void vmrun(uint64_t vmcb_addr);
 void scheduale();
 void store_vmcb_guest();
-void vmrun();
+void vmrun(uint64_t vmcb_addr);
 void init_vm();
 void vmexit_handler();
 void handle_ioio_vmexit();

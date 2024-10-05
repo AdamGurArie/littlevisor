@@ -2,6 +2,8 @@
 #include "fat32.h"
 #include <cstdint>
 #include <iterator>
+#include <sys/types.h>
+#include "../common.h"
 
 #define MAX_NUMBER_OF_INODES 100
 
@@ -18,12 +20,26 @@ static uint32_t findFreeInode() {
   return OPEN_FILE_ERROR;
 }
 
-uint32_t vopenFile(char* filename) {
+uint32_t vopenFile(const char* filename) {
   if(!checkFileExists(filename)) {
     return OPEN_FILE_ERROR;
   }
 
-  return findFreeInode();
+  uint32_t free_node = findFreeInode();
+  if(free_node == OPEN_FILE_ERROR) {
+    return free_node;
+  }
+
+  kmemcpy(
+    (uint8_t*)file_descriptor_list[free_node].filename,
+    (const uint8_t*)filename,
+    12
+  );
+
+  file_descriptor_list[free_node].occupied = 1;
+  file_descriptor_list[free_node].position = 0;
+
+  return free_node;
 }
 
 uint32_t vreadFile(uint32_t fd, char* buff, uint32_t size) {

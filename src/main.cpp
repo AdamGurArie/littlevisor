@@ -1,5 +1,6 @@
 #include "drivers/ram_disk.h"
 #include "fs/fat32.h"
+#include "fs/vfs.h"
 #include "kheap.h"
 #include  "limine.h"
 #include "common.h"
@@ -63,8 +64,12 @@ void _start() {
   limine_file* limine_f = module_request.response->modules[0];
   ramDisk* ramdisk = new ramDisk((uintptr_t)limine_f->address);
   init_fs(ramdisk);
+  char file_buff[4];
   const char* file_name = "vm_test.bin";
-  getFileSize(file_name);
+  uint32_t fd = vopenFile(file_name);
+  vreadFile(fd, file_buff, 4);
+  //kpalloc();
+  init_vm();
   //uint8_t buff[512];
   //ramdisk.read_sector(buff, 0, 1);
 }

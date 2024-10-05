@@ -36,7 +36,7 @@ void init_pmm(struct limine_memmap_response* memmap_response) {
 
   for(uint32_t entry = 0; entry < memmap_response->entry_count; entry++) {
     struct limine_memmap_entry* curr_entry = memmap_response->entries[entry];
-    if(curr_entry->type == LIMINE_MEMMAP_USABLE) {
+    if((curr_entry->type == LIMINE_MEMMAP_USABLE) && (curr_entry->base != (uint64_t)TO_LOWER_HALF(page_frame_allocator_struct.bitmap))) {
       for(uint32_t i = 0; i < (curr_entry->length / 0x1000); i++) {
         uint64_t addr = curr_entry->base / 0x1000 + i;
         uint32_t byte_idx = addr / 8;
@@ -74,7 +74,11 @@ uint64_t kpalloc_contignious(uint32_t count) {
         }
 
         if(z == count) {
-          return (uint64_t)((i+j)*0x1000);
+          for(z = 1; z < count; z++) {
+            clearbit((uint8_t*)&page_frame_allocator_struct.bitmap[i], j+z);
+          }
+
+          return (uint64_t)((i*8+j)*0x1000);
         }
       }
     }

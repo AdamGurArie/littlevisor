@@ -19,6 +19,22 @@ static uint32_t curr_guest_idx = 0;
 static uint32_t quantom_counter = 0;
 static uint64_t ioio_map_addr = 0;
 
+void enable_svm() {
+  uint64_t output = 0;
+  uint64_t leaf = 0;
+  uint64_t sub_leaf = 0;
+  asm volatile("cpuid" : "=d"(output) : "c"(leaf), "d"(sub_leaf));
+  if(getbit(output, 20) == 0) {
+    asm volatile("hlt");
+    return;
+  }
+
+  asm volatile("rdmsr" : "=a"(output) : "a"(0xC0000080));
+  setbit(&output, 12);
+
+  asm volatile("wrmsr" :: "a"(0xC0000080), "c"(output));
+}
+
 void vmrun(uint64_t vmcb_addr) {
   asm volatile("mov %0, %%rax" :: "m"(vmcb_addr));
   asm volatile("vmrun");
@@ -62,23 +78,19 @@ void scheduale() {
   }
 }
 
-void vmrun() {
-  asm volatile("mov %%rax, %0" :: "r"(vmcb_addr));
-  asm volatile("vmrun");
-}
-
 void init_vm() {
   // allocate memory for the vmcb
+  enable_svm();
   vmcb_addr = kpalloc();
-  vmcb* vmcb_struct = (vmcb*)vmcb_addr;
-  kmemset((uint8_t*)vmcb_addr, 0x0, sizeof(vmcb));
+  vmcb* vmcb_struct = (vmcb*)TO_HIGHER_HALF(vmcb_addr);
+  kmemset((uint8_t*)TO_HIGHER_HALF(vmcb_addr), 0x0, sizeof(vmcb));
 
   // init ioio map
   ioio_map_addr = kpalloc_contignious(3);
   for(auto i : list_of_ports_to_intercept) {
     uint32_t byte = i / 8;
     uint32_t bit = i % 8;
-    uint64_t* ioio_map_ptr = (uint64_t*)ioio_map_addr;
+    uint64_t* ioio_map_ptr = (uint64_t*)TO_HIGHER_HALF(ioio_map_addr);
     setbit(&ioio_map_ptr[byte], bit);
   }
 
@@ -158,7 +170,7 @@ void init_vm() {
             0x8E,
             vm_mem_map);
 
-    vreadFile(fd, (char*)(vmcb_struct->state_save_area.rip + i * 0x1000), 0x1000);
+    vreadFile(fd, (char*)(TO_HIGHER_HALF(vmcb_struct->state_save_area.rip + i * 0x1000)), 0x1000);
   }
 
   vmcb_struct->control.n_cr3 = vm_mem_map;
@@ -169,7 +181,7 @@ void init_vm() {
   // create virtual cmos 
   // vmrun
 
-  vmrun();
+  vmrun(vmcb_addr);
 }
 
 void vmexit_handler() {

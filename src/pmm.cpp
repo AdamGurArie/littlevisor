@@ -74,7 +74,7 @@ uint64_t kpalloc_contignious(uint32_t count) {
         }
 
         if(z == count) {
-          for(z = 1; z < count; z++) {
+          for(z = 0; z < count; z++) {
             clearbit((uint8_t*)&page_frame_allocator_struct.bitmap[i], j+z);
           }
 

@@ -3,9 +3,9 @@ BUILD_DIR = build
 LINKER_FILE = linker.ld
 OUTPUT := $(BUILD_DIR)/kernel.elf
 ISO := $(BUILD_DIR)/kernel.iso
-COMPILATION_FLAGS := -g -Wall -Wextra -pipe -fno-stack-protector -mno-red-zone -Waddress-of-packed-member -fpermissive -nostdlib -std=c++20 $(INCLUDE_PATH)
+COMPILATION_FLAGS := -g -Wall -fno-exceptions -Wextra -pipe -fno-stack-protector -mno-red-zone -Waddress-of-packed-member -fpermissive -nostdlib -std=c++20 $(INCLUDE_PATH)
 
-LDFLAGS ?= -nostd $(INCLUDE_PATH)
+LDFLAGS ?= -nostdlib -std=c++20 $(INCLUDE_PATH)
 
 override INTERNALCFLAGS :=   \
 	-I.                  \
@@ -41,9 +41,11 @@ OBJECT_FILES = $(ASM_OBJECT_FILES) $(CPP_OBJECT_FILES)
 
 build-iso: $(ISO)
 
+tests: $(OBJECT_FILES)
+
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
-	mkdir -p $(dir $@)
-	g++ $(COMPILATION_FLAGS) -c $< -o $@
+	@mkdir -p $(dir $@)
+	@g++ $(COMPILATION_FLAGS) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.s
 	@mkdir -p $(dir $@)
@@ -51,14 +53,15 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.s
 
 $(OUTPUT): $(OBJECT_FILES)
 	@mkdir -p $(BUILD_DIR)
-	@echo $(OBJECT_FILES)
-	ld $(LDFLAGS) $(INTERNALLDFLAGS) -o $(OUTPUT) $(OBJECT_FILES) $(OBJECT_FILES_ASM)
+	-@echo $(OBJECT_FILES)
+	@g++ $(LDFLAGS) $(INTERNALLDFLAGS) -o $(OUTPUT) $(OBJECT_FILES) $(OBJECT_FILES_ASM)
 
 $(ISO): $(OUTPUT) limine
 	mkdir -p iso_root/boot 
 	cp -v build/kernel.elf iso_root/boot/
 	mkdir -p iso_root/boot/limine
 	cp -v limine.cfg limine/limine-bios.sys limine/limine-bios-cd.bin limine/limine-uefi-cd.bin iso_root/boot/limine/
+	cp -v test_image.img iso_root/boot/
 	mkdir -p iso_root/EFI/BOOT 
 	cp -v limine/BOOTX64.EFI iso_root/EFI/BOOT/
 	cp -v limine/BOOTIA32.EFI iso_root/EFI/BOOT/
@@ -71,10 +74,10 @@ $(ISO): $(OUTPUT) limine
 	qemu-system-x86_64 -M q35 -debugcon stdio -cdrom $(ISO) -boot d -no-reboot -no-shutdown 
 
 debug:
-	qemu-system-x86_64 -M q35 -cdrom $(ISO) \
+	qemu-system-x86_64 -M q35 -machine type=pc,accel=tcg -cdrom $(ISO) \
 	-drive id=disk,file=test_image.img,format=raw,if=none \
 	-device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 \
-	-trace ahci* -S -d int -debugcon stdio -boot d -no-reboot -no-shutdown -s -S
+	-trace ahci* -S -d int -debugcon stdio -cpu max -boot d -no-reboot -no-shutdown -s -S
 
 clean:
 	@rm -rf $(BUILD_DIR)

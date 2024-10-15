@@ -44,7 +44,7 @@ uint32_t getEntryByCluster(uint32_t cluster) {
   uint32_t fat_sector = bpb_struct.num_of_reserved_sectors + (cluster / SECTOR_SIZE);
   uint32_t entry_offset = cluster % SECTOR_SIZE;
   uint8_t* sector_buff = (uint8_t*)kmalloc(storage_dev->get_sector_size());
-  storage_dev->read_sector(sector_buff, fat_sector*SECTOR_SIZE, storage_dev->get_sector_size());
+  storage_dev->read_sector(sector_buff, fat_sector*SECTOR_SIZE, 1);
   uint32_t fat_entry = 0;
   kmemcpy((uint8_t*)&fat_entry, &sector_buff[entry_offset], sizeof(uint32_t));
   return fat_entry;
@@ -99,7 +99,7 @@ FILE_DESCRIPTOR findFile(const char* filename) {
 
 void write_to_filedesc(char* filename, FILE_DESCRIPTOR fd) {
   uint32_t curr_clust = 2;
-for(curr_clust = 2; curr_clust <= bpb_struct.large_sector_count; curr_clust++) {
+  for(curr_clust = 2; curr_clust <= bpb_struct.large_sector_count; curr_clust++) {
     for(uint32_t sector = 0; sector < bpb_struct.sectors_per_clusted; sector++) {
       uint32_t curr_sector_num = cluster_to_sector(curr_clust);
       uint8_t curr_sector[bpb_struct.bytes_per_sector];

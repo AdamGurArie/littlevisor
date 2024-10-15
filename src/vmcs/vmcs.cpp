@@ -7,17 +7,20 @@
 #include "../kheap.h"
 #include "../instruction_decoder.h"
 #include <cstdint>
+#include <cstdio>
+#include <math.h>
 #include <bit>
 
 #define QUANTOM 10
 
-static uint32_t list_of_ports_to_intercept[] = {0x1f7};
+static uint32_t list_of_ports_to_intercept[] = {}; //{0x1f7};
 static uint64_t vmcb_addr = 0;
 static context guests[10] = {};
 static uint64_t guests_count = 0;
 static uint32_t curr_guest_idx = 0;
 static uint32_t quantom_counter = 0;
 static uint64_t ioio_map_addr = 0;
+static uint64_t msrpm_base_addr = 0;
 
 void enable_svm() {
   uint64_t output = 0;
@@ -29,14 +32,22 @@ void enable_svm() {
     return;
   }
 
-  asm volatile("rdmsr" : "=a"(output) : "a"(0xC0000080));
+  asm volatile("rdmsr" : "=a"(output) : "c"(0xC0000080));
   setbit(&output, 12);
 
-  asm volatile("wrmsr" :: "a"(0xC0000080), "c"(output));
+  asm volatile("wrmsr" :: "c"(0xC0000080), "a"(output));
+
+  asm volatile("rdmsr" : "=a"(output) : "c"(0xC0000080));
+  if(getbit(&output, 12) == 0) {
+    asm volatile("hlt");
+  }
+
+  return;
 }
 
 void vmrun(uint64_t vmcb_addr) {
   asm volatile("mov %0, %%rax" :: "m"(vmcb_addr));
+  asm volatile("vmsave");
   asm volatile("vmrun");
   // 1. handle vm-exit
   // 2. scheduale next vm
@@ -80,10 +91,13 @@ void scheduale() {
 
 void init_vm() {
   // allocate memory for the vmcb
-  enable_svm();
   vmcb_addr = kpalloc();
   vmcb* vmcb_struct = (vmcb*)TO_HIGHER_HALF(vmcb_addr);
   kmemset((uint8_t*)TO_HIGHER_HALF(vmcb_addr), 0x0, sizeof(vmcb));
+
+  uint64_t host_state_area = kpalloc();
+  kmemset((uint8_t*)TO_HIGHER_HALF(host_state_area), 0x0, 0x1000);
+  asm volatile("wrmsr" :: "c"(0xC0010117), "a"(host_state_area & 0xFFFFFFFF), "d"(host_state_area >> 32));
 
   // init ioio map
   ioio_map_addr = kpalloc_contignious(3);
@@ -94,45 +108,49 @@ void init_vm() {
     setbit(&ioio_map_ptr[byte], bit);
   }
 
+  // init msr 
+  msrpm_base_addr = kpalloc_contignious(2);
+  kmemset((uint8_t*)TO_HIGHER_HALF(msrpm_base_addr), 0x0, 0x1000);
+
   // init vmcb struct with the right paramemeters
   vmcb_struct->state_save_area.cs.selector = 0xF000;
   vmcb_struct->state_save_area.cs.base = 0xFFFF0000;
   vmcb_struct->state_save_area.cs.limit = 0xFFFF;
-  vmcb_struct->state_save_area.cs.attrib = 0x9A;
+  vmcb_struct->state_save_area.cs.attrib = 0x93;
 
   vmcb_struct->state_save_area.ds.selector = 0x0;
   vmcb_struct->state_save_area.ds.base = 0x0;
   vmcb_struct->state_save_area.ds.limit = 0xFFFF;
-  vmcb_struct->state_save_area.ds.attrib = 0x92;
+  vmcb_struct->state_save_area.ds.attrib = 0x93;
 
   vmcb_struct->state_save_area.es.selector = 0x0;
   vmcb_struct->state_save_area.es.base = 0x0;
   vmcb_struct->state_save_area.es.limit = 0xFFFF;
-  vmcb_struct->state_save_area.es.attrib = 0x0;
+  vmcb_struct->state_save_area.es.attrib = 0x93;
 
   vmcb_struct->state_save_area.gs.selector = 0x0;
   vmcb_struct->state_save_area.gs.base = 0x0;
   vmcb_struct->state_save_area.gs.limit = 0xFFFF;
-  vmcb_struct->state_save_area.gs.attrib = 0x0;
+  vmcb_struct->state_save_area.gs.attrib = 0x93;
 
   vmcb_struct->state_save_area.fs.selector = 0x0;
   vmcb_struct->state_save_area.fs.base = 0x0;
   vmcb_struct->state_save_area.fs.limit = 0xFFFF;
-  vmcb_struct->state_save_area.fs.attrib = 0x0;
+  vmcb_struct->state_save_area.fs.attrib = 0x93;
 
   vmcb_struct->state_save_area.ss.selector = 0x0;
   vmcb_struct->state_save_area.ss.base = 0x0;
   vmcb_struct->state_save_area.ss.limit = 0xFFFF;
-  vmcb_struct->state_save_area.ss.attrib = 0x0;
+  vmcb_struct->state_save_area.ss.attrib = 0x93;
 
   vmcb_struct->state_save_area.gdtr.base = 0x0;
-  vmcb_struct->state_save_area.gdtr.limit = 0x0;
+  vmcb_struct->state_save_area.gdtr.limit = 0xFFFF;
   vmcb_struct->state_save_area.gdtr.attrib = 0x0;
   vmcb_struct->state_save_area.gdtr.selector = 0x0;
 
   vmcb_struct->state_save_area.idtr.selector = 0x0;
   vmcb_struct->state_save_area.idtr.base = 0x0;
-  vmcb_struct->state_save_area.idtr.limit = 0x0;
+  vmcb_struct->state_save_area.idtr.limit = 0xFFFF;
   vmcb_struct->state_save_area.idtr.attrib = 0x0;
 
   vmcb_struct->state_save_area.ldtr.selector = 0x0;
@@ -146,21 +164,33 @@ void init_vm() {
   vmcb_struct->state_save_area.tr.attrib = 0x83;
 
   vmcb_struct->state_save_area.rip = 0xFFF0;
-  vmcb_struct->state_save_area.cr0 = 0x60000010;
+  vmcb_struct->state_save_area.cr0 = (1 << 29) | (1 << 30) | (1 << 4);
   vmcb_struct->state_save_area.cr2 = 0x0;
   vmcb_struct->state_save_area.cr3 = 0x0;
   vmcb_struct->state_save_area.cr4 = 0x0;
-  vmcb_struct->state_save_area.rflags = 0x0;
-  vmcb_struct->state_save_area.efer = 0x0;
+  vmcb_struct->state_save_area.rflags = 1 << 1;
+  vmcb_struct->state_save_area.efer = 1 << 12;
   vmcb_struct->state_save_area.rax = 0x0;
   vmcb_struct->control.interrupt_shadow = 0x0;
   vmcb_struct->state_save_area.rsp = 0x0;
+  vmcb_struct->state_save_area.dr6 = 0xFFFF0FF0;
+  vmcb_struct->state_save_area.dr7 = 0x400;
+  vmcb_struct->state_save_area.rsp = 0;
+
+  vmcb_struct->control.nrip = 0xFFF0;
+  vmcb_struct->control.np_enable = 1;
+
+  vmcb_struct->control.guest_asid = 1;
+  vmcb_struct->control.iopm_base_pa = ioio_map_addr;
+  vmcb_struct->control.msrpm_base_pa = msrpm_base_addr;
+  vmcb_struct->control.intercept_cr_reads = 1;
+  vmcb_struct->control.intercepts_cr_writes = 1;
 
   // load coreboot to memory address starting with RIP
-  uint32_t fd = vopenFile((char*)"core_boot"); 
+  uint32_t fd = vopenFile((char*)"vm_test.bin"); 
   //map to rip address
   uint32_t file_size = vgetFileSize(fd);
-  uint32_t num_of_pages = file_size / 0x1000;
+  uint32_t num_of_pages = (file_size + 0x1000 - 1) / 0x1000;
   uint64_t vm_mem_map = create_clean_virtual_space();
   
   for(uint32_t i = 0; i < num_of_pages; i++) {
@@ -170,7 +200,7 @@ void init_vm() {
             0x8E,
             vm_mem_map);
 
-    vreadFile(fd, (char*)(TO_HIGHER_HALF(vmcb_struct->state_save_area.rip + i * 0x1000)), 0x1000);
+    vreadFile(fd, (char*)(TO_HIGHER_HALF(coreboot_page)), 0x1000);
   }
 
   vmcb_struct->control.n_cr3 = vm_mem_map;
@@ -180,7 +210,8 @@ void init_vm() {
   //ata_pio_device* ata_device = new ata_pio_device(storage_dev); 
   // create virtual cmos 
   // vmrun
-
+  
+  enable_svm();
   vmrun(vmcb_addr);
 }
 

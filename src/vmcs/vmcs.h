@@ -95,72 +95,38 @@ struct vmcb_state_save_area {
   struct segment_selector ldtr;
   struct segment_selector idtr;
   struct segment_selector tr;
-  uint8_t reserved_1[42];
-  uint8_t cpl;
-  uint32_t reserved_2;
-  uint64_t efer;
-  uint8_t reserved_3[7];
-  uint64_t perf_ctl0;
-  uint64_t perf_ctr0;
-  uint64_t perf_ctl1;
-  uint64_t perf_ctr1;
-  uint64_t perf_ctl2;
-  uint64_t perf_ctr2;
-  uint64_t perf_ctl3;
-  uint64_t perf_ctr3;
-  uint64_t perf_ctl4;
-  uint64_t perf_ctr4;
-  uint64_t perf_ctl5;
-  uint64_t perf_ctr5;
-  uint64_t cr4;
-  uint64_t cr3;
-  uint64_t cr0;
-  uint64_t dr7;
-  uint64_t dr6;
-  uint64_t rflags;
-  uint64_t rip;
-  uint8_t reserved_4[63];
-  uint64_t instr_retired_ctr;
-  uint64_t perf_ctr_global_sts;
-  uint64_t perf_ctr_global_ctl;
-  uint8_t reserved_5[3];
-  uint64_t rsp;
-  uint64_t s_cet;
-  uint64_t ssp;
-  uint64_t isst_addr;
-  uint64_t rax;
-  uint64_t star;
-  uint64_t lstar;
-  uint64_t cstar;
-  uint64_t sfmask;
-  uint64_t kernelgsbase;
-  uint64_t sysenter_cs;
-  uint64_t sysenter_esp;
-  uint64_t sysenter_eip;
-  uint64_t cr2;
-  uint8_t reserved_6[31];
-  uint64_t g_pat;
-  uint64_t dbgctl;
-  uint64_t br_from;
-  uint64_t br_to;
-  uint64_t lastexepfrom;
-  uint64_t lastexcpto;
-  uint64_t dbgexinctl;
-  uint8_t reserved_7[72];
-  uint64_t spec_ctrl;
-  uint8_t reserved_8[904];
-  uint8_t lbr_stack_from_to[256];
-  uint64_t lbr_select;
-  uint64_t ibs_fetch_ctl;
-  uint64_t ibs_fetch_linaddr;
-  uint64_t ibs_op_ctl;
-  uint64_t ibs_op_rip;
-  uint64_t ibs_of_data;
-  uint64_t ibs_op_data2;
-  uint64_t ibs_op_data3;
-  uint64_t ibs_dc_linaddr;
-  uint64_t bs_ibstgt_rip; 
-  uint64_t ic_ibs_extd_ctl;
+  uint8_t reserved1[0x0cb - 0x0a0];
+  uint8_t cpl;                          // +0x0cb
+  uint32_t reserved2;                   // +0x0cc
+  uint64_t efer;                        // +0x0d0
+  uint8_t reserved3[0x148 - 0x0d8];     // +0x0d8
+  uint64_t cr4;                         // +0x148
+  uint64_t cr3;                         // +0x150
+  uint64_t cr0;                         // +0x158
+  uint64_t dr7;                         // +0x160
+  uint64_t dr6;                         // +0x168
+  uint64_t rflags;                      // +0x170
+  uint64_t rip;                         // +0x178
+  uint8_t reserved4[0x1d8 - 0x180];     // +0x180
+  uint64_t rsp;                         // +0x1d8
+  uint8_t reserved5[0x1f8 - 0x1e0];     // +0x1e0
+  uint64_t rax;                         // +0x1f8
+  uint64_t star;                        // +0x200
+  uint64_t lstar;                       // +0x208
+  uint64_t cstar;                       // +0x210
+  uint64_t sfMask;                      // +0x218
+  uint64_t kernelgsbase;                // +0x220
+  uint64_t sysentercs;                  // +0x228
+  uint64_t sysenteresp;                 // +0x230
+  uint64_t sysentereip;                 // +0x238
+  uint64_t cr2;                         // +0x240
+  uint8_t reserved6[0x268 - 0x248];     // +0x248
+  uint64_t gpat;                        // +0x268
+  uint64_t dbgctl;                      // +0x270
+  uint64_t brfrom;                      // +0x278
+  uint64_t brto;                        // +0x280
+  uint64_t lastexcepfrom;               // +0x288
+  uint64_t lastexcepto;                 // +0x290
 } __attribute__((packed));
 
 struct vmcb {

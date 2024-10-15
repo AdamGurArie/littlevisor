@@ -18,7 +18,7 @@ void mapPage(uint64_t phys_addr, uint64_t virt_addr, uint16_t flags, uint64_t cr
   indexes[2] = (virt_addr >> 21) & 0x1FF;
   indexes[3] = (virt_addr >> 12) & 0x1FF;
 
-  pagingLevel* table = std::bit_cast<pagingLevel*>(cr3); 
+  pagingLevel* table = std::bit_cast<pagingLevel*>(TO_HIGHER_HALF(cr3)); 
   
   for(int i = 0; i < 3; i++) {
     if((table->entries[indexes[i]] & 1) == 0) {
@@ -27,10 +27,10 @@ void mapPage(uint64_t phys_addr, uint64_t virt_addr, uint16_t flags, uint64_t cr
         return;
       }
       
-      kmemset((uint8_t*)new_page, 0x0, 0x1000);
+      kmemset((uint8_t*)TO_HIGHER_HALF(new_page), 0x0, 0x1000);
       table->entries[indexes[i]] = new_page | flags;
     } else {
-      table = std::bit_cast<pagingLevel*>(table->entries[indexes[i]] & ~0xFFF);
+      table = std::bit_cast<pagingLevel*>(TO_HIGHER_HALF((table->entries[indexes[i]] & ~0xFFF)));
     }
   }
 

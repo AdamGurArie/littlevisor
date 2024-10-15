@@ -70,6 +70,8 @@ void _start() {
   vreadFile(fd, file_buff, 4);
   //kpalloc();
   init_vm();
+
+  while(1);
   //uint8_t buff[512];
   //ramdisk.read_sector(buff, 0, 1);
 }

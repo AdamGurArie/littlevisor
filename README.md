@@ -1,2 +1,2 @@
 # littlevisor
-My small hypervisor
+My little hypervisor

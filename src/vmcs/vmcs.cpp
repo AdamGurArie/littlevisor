@@ -107,6 +107,8 @@ void init_vm() {
     uint64_t* ioio_map_ptr = (uint64_t*)TO_HIGHER_HALF(ioio_map_addr);
     setbit(&ioio_map_ptr[byte], bit);
   }
+  // check if this actually goes to the right place
+  vmcb_struct->control.intercepts_insts_2 = (1 << 0);
 
   // init msr 
   msrpm_base_addr = kpalloc_contignious(2);
@@ -201,6 +203,7 @@ void init_vm() {
             vm_mem_map);
 
     vreadFile(fd, (char*)(TO_HIGHER_HALF(coreboot_page)), 0x1000);
+    vmcb_struct->state_save_area.rip = coreboot_page;
   }
 
   vmcb_struct->control.n_cr3 = vm_mem_map;

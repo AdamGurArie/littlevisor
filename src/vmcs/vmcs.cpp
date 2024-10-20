@@ -113,7 +113,8 @@ void init_vm() {
   // init msr 
   msrpm_base_addr = kpalloc_contignious(2);
   kmemset((uint8_t*)TO_HIGHER_HALF(msrpm_base_addr), 0x0, 0x1000);
-
+  
+  vmcb_struct->control.intercept_exceptions = 0xFFFF;
   // init vmcb struct with the right paramemeters
   vmcb_struct->state_save_area.cs.selector = 0xF000;
   vmcb_struct->state_save_area.cs.base = 0xFFFF0000;

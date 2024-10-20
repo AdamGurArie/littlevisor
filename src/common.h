@@ -74,6 +74,17 @@ inline uint8_t getbit(uint64_t* val, uint8_t pos) {
   return (*val >> pos) & (uint64_t)1;
 }
 
+inline uint64_t rdmsr(uint32_t msr) {
+  uint32_t eax = 0;
+  uint32_t edx = 0;
+  asm volatile("rdmsr" : "d"(edx) "a"(eax) : "c"(msr));
+  return (uint64_t)(edx >> 32) | eax;
+}
+
+inline void wrmsr(uint32_t msr, uint64_t val) {
+
+}
+
 void* operator new(std::size_t size);
 void operator delete(void* p) noexcept;
 void operator delete(void* p, uint64_t param) noexcept;

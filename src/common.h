@@ -77,13 +77,21 @@ inline uint8_t getbit(uint64_t* val, uint8_t pos) {
 inline uint64_t rdmsr(uint32_t msr) {
   uint32_t eax = 0;
   uint32_t edx = 0;
-  asm volatile("rdmsr" : "d"(edx) "a"(eax) : "c"(msr));
-  return (uint64_t)(edx >> 32) | eax;
+  asm volatile("rdmsr" : "=d"(edx), "=a"(eax) : "c"(msr));
+  return ((uint64_t)edx >> 32) | eax;
 }
 
 inline void wrmsr(uint32_t msr, uint64_t val) {
-
+  uint32_t eax = val & 0xFFFFFFFF;
+  uint32_t edx = (val >> 32) & 0xFFFFFFFF;
+  asm volatile("wrmsr" :: "d"(edx), "a"(eax), "c"(msr));
 }
+
+inline uint64_t cpuid(uint32_t leaf, uint32_t subleaf) {
+  uint64_t output = 0;
+  asm volatile("cpuid" : "=d"(output) : "c"(leaf), "d"(subleaf));
+  return output;
+};
 
 void* operator new(std::size_t size);
 void operator delete(void* p) noexcept;

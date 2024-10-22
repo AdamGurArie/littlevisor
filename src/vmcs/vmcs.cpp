@@ -26,18 +26,22 @@ void enable_svm() {
   uint64_t output = 0;
   uint64_t leaf = 0;
   uint64_t sub_leaf = 0;
-  asm volatile("cpuid" : "=d"(output) : "c"(leaf), "d"(sub_leaf));
+  // asm volatile("cpuid" : "=d"(output) : "c"(leaf), "d"(sub_leaf));
+  output = cpuid(leaf, sub_leaf);
   if(getbit(output, 20) == 0) {
     asm volatile("hlt");
     return;
   }
 
-  asm volatile("rdmsr" : "=a"(output) : "c"(0xC0000080));
+  // asm volatile("rdmsr" : "=a"(output) : "c"(0xC0000080));
+  output = rdmsr(0xC0000080);
   setbit(&output, 12);
 
-  asm volatile("wrmsr" :: "c"(0xC0000080), "a"(output));
+  // asm volatile("wrmsr" :: "c"(0xC0000080), "a"(output));
+  wrmsr(0xC0000080, output);
 
-  asm volatile("rdmsr" : "=a"(output) : "c"(0xC0000080));
+  // asm volatile("rdmsr" : "=a"(output) : "c"(0xC0000080));
+  output = rdmsr(0xC0000080);
   if(getbit(&output, 12) == 0) {
     asm volatile("hlt");
   }
@@ -97,7 +101,8 @@ void init_vm() {
 
   uint64_t host_state_area = kpalloc();
   kmemset((uint8_t*)TO_HIGHER_HALF(host_state_area), 0x0, 0x1000);
-  asm volatile("wrmsr" :: "c"(0xC0010117), "a"(host_state_area & 0xFFFFFFFF), "d"(host_state_area >> 32));
+  // asm volatile("wrmsr" :: "c"(0xC0010117), "a"(host_state_area & 0xFFFFFFFF), "d"(host_state_area >> 32));
+  wrmsr(0xC0010117, host_state_area);
 
   // init ioio map
   ioio_map_addr = kpalloc_contignious(3);

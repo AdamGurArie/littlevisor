@@ -64,7 +64,8 @@ struct vmcb_control {
   uint64_t exitinfo1;
   uint64_t exitinfo2;
   uint64_t exitintinfo;
-  uint64_t np_enable;
+  uint64_t np_enable : 1;
+  uint64_t reserved_12 : 63;
   uint64_t avic_apic_bar_reserved;
   uint64_t guest_phys_addr_ghcb;
   event_injection_field eventinj;
@@ -76,10 +77,10 @@ struct vmcb_control {
   uint8_t number_of_bytes_fetched;
   uint8_t guest_instruction_bytes[15];
   uint64_t avic_apic_backing_page_ptr;
-  uint64_t reserved_12;
+  uint64_t reserved_13;
   uint64_t avic_logical_table_ptr;
   uint64_t avic_physical_table_ptr;
-  uint64_t reserved_13;
+  uint64_t reserved_14;
   uint64_t vmcb_save_state_ptr;
   uint8_t reserved26[752];
 } __attribute__((packed));

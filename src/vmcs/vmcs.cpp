@@ -22,17 +22,29 @@ static uint32_t quantom_counter = 0;
 static uint64_t ioio_map_addr = 0;
 static uint64_t msrpm_base_addr = 0;
 
-void enable_svm() {
+/* uint8_t detect_np_support() {
   uint64_t output = 0;
-  uint64_t leaf = 0;
+  uint64_t leaf = 0x8000000A;
   uint64_t sub_leaf = 0;
+} */
+
+void enable_svm() {
+  // check if svm is supported
+  uint32_t a, b, c, d;
   // asm volatile("cpuid" : "=d"(output) : "c"(leaf), "d"(sub_leaf));
-  output = cpuid(leaf, sub_leaf);
-  if(getbit(output, 20) == 0) {
+  cpuid(0x80000001, a, b, c, d);
+  if(getbit(c, 2) == 0) {
     asm volatile("hlt");
     return;
   }
 
+  cpuid(0x8000000A, a, b, c, d);
+  if(getbit(d, 0) == 0) {
+    asm volatile("hlt");
+    return;
+  }
+
+  uint64_t output = 0;
   // asm volatile("rdmsr" : "=a"(output) : "c"(0xC0000080));
   output = rdmsr(0xC0000080);
   setbit(&output, 12);
@@ -171,7 +183,7 @@ void init_vm() {
   vmcb_struct->state_save_area.tr.limit = 0xFFFF;
   vmcb_struct->state_save_area.tr.attrib = 0x83;
 
-  vmcb_struct->state_save_area.rip = 0xFFF0;
+  vmcb_struct->state_save_area.rip = 0xec31;
   vmcb_struct->state_save_area.cr0 = (1 << 29) | (1 << 30) | (1 << 4);
   vmcb_struct->state_save_area.cr2 = 0x0;
   vmcb_struct->state_save_area.cr3 = 0x0;
@@ -183,16 +195,21 @@ void init_vm() {
   vmcb_struct->state_save_area.rsp = 0x0;
   vmcb_struct->state_save_area.dr6 = 0xFFFF0FF0;
   vmcb_struct->state_save_area.dr7 = 0x400;
-  vmcb_struct->state_save_area.rsp = 0;
+  vmcb_struct->state_save_area.rsp = 0x0;
 
   vmcb_struct->control.nrip = 0xFFF0;
   vmcb_struct->control.np_enable = 1;
 
-  vmcb_struct->control.guest_asid = 1;
+  vmcb_struct->control.guest_asid = 4;
   vmcb_struct->control.iopm_base_pa = ioio_map_addr;
   vmcb_struct->control.msrpm_base_pa = msrpm_base_addr;
   vmcb_struct->control.intercept_cr_reads = 1;
   vmcb_struct->control.intercepts_cr_writes = 1;
+
+  vmcb_struct->control.intercept_exceptions = (1 << 1) | (1 << 6) | (1 << 14) | (1 << 17) | (1 << 18);
+  vmcb_struct->control.intercept_exceptions &= ~((1 << 14) | (1 << 6));
+  vmcb_struct->control.tlb_control = 0x1;
+  vmcb_struct->control.vmcb_clean_bits = 0;
 
   // load coreboot to memory address starting with RIP
   uint32_t fd = vopenFile((char*)"vm_test.bin"); 
@@ -203,16 +220,16 @@ void init_vm() {
   
   for(uint32_t i = 0; i < num_of_pages; i++) {
     uint64_t coreboot_page = kpalloc();
-    mapPage(coreboot_page + i * 0x1000,
-            vmcb_struct->state_save_area.rip + i * 0x1000,
-            0x8E,
-            vm_mem_map);
+    // mapPage(coreboot_page + i * 0x1000,
+    //         vmcb_struct->state_save_area.rip + i * 0x1000,
+    //         0x8E,
+    //         vm_mem_map);
 
     vreadFile(fd, (char*)(TO_HIGHER_HALF(coreboot_page)), 0x1000);
-    vmcb_struct->state_save_area.rip = coreboot_page;
+    // vmcb_struct->state_save_area.rip = coreboot_page;
   }
 
-  vmcb_struct->control.n_cr3 = vm_mem_map;
+  // vmcb_struct->control.n_cr3 = vm_mem_map;
 
   // create ide virtual driver
   //virtual_storage_device* storage_dev = new virtual_storage_device((char*)"ide_disk", 512);
@@ -221,7 +238,7 @@ void init_vm() {
   // vmrun
   
   enable_svm();
-  vmrun(vmcb_addr);
+  vmrun(vmcb_addr);           // MUST DEBUG WITH STEPI!!!!!!
 }
 
 void vmexit_handler() {

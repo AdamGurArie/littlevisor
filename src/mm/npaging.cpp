@@ -29,6 +29,7 @@ void mapPage(uint64_t phys_addr, uint64_t virt_addr, uint16_t flags, uint64_t cr
       
       kmemset((uint8_t*)TO_HIGHER_HALF(new_page), 0x0, 0x1000);
       table->entries[indexes[i]] = new_page | flags;
+      table = std::bit_cast<pagingLevel*>(TO_HIGHER_HALF((table->entries[indexes[i]] & ~0xFFF)));
     } else {
       table = std::bit_cast<pagingLevel*>(TO_HIGHER_HALF((table->entries[indexes[i]] & ~0xFFF)));
     }

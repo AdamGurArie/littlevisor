@@ -56,3 +56,14 @@ void save_host_pageMap() {
 uint64_t create_clean_virtual_space() {
   return kpalloc();
 }
+
+void identity_map(uint64_t cr3, uint64_t start_addr, uint64_t num_of_pages, uint16_t flags) {
+  for(int i = 0; i < num_of_pages; i++) {
+    mapPage(
+        start_addr + i * 0x1000,
+        start_addr + i * 0x1000,
+        flags,
+        cr3
+    );
+  }
+}

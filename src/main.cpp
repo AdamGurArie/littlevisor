@@ -55,6 +55,9 @@ void memcpy(uint8_t* dest, uint8_t* src, uint32_t size) {
 void _start() {
   init_pmm(memmap_req.response);
   init_idt();
+  // while(true) {
+  //   asm volatile("out %0, $0xE9" :: "a"('a'));
+  // }
 
   init_acpi((uint64_t)rsdp_request.response->address);
   MCFG* mcfg = get_mcfg();

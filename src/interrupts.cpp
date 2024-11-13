@@ -43,6 +43,8 @@ void init_idt() {
     init_idtentry(i, (uint64_t)general_isr_tram, 0, 0, 0xF);
   }
 
+  init_idtentry(0xE, (uint64_t)page_fault_handler, 0, 0, 0xF);
+
   loadidt();
 }
 

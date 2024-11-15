@@ -12,7 +12,7 @@ void mapPage(uint64_t phys_addr, uint64_t virt_addr, uint16_t flags, uint64_t cr
     cr3 = cr3_val;
   }
 
-  uint8_t indexes[4] = {0};
+  uint16_t indexes[4] = {0};
   indexes[0] = (virt_addr >> 39) & 0x1FF;
   indexes[1] = (virt_addr >> 30) & 0x1FF;
   indexes[2] = (virt_addr >> 21) & 0x1FF;

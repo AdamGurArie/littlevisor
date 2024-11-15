@@ -232,7 +232,7 @@ void init_vm() {
     // vmcb_struct->state_save_area.rip = coreboot_page;
   }
 
-  // identity_map(vm_mem_map, 0x0, 0x1000, 0x7);
+  // identity_map(vm_mem_map, 0xffff8000, 0x1000, 0x7);
    
   vmcb_struct->control.n_cr3 = vm_mem_map;
 

@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 
+#define PAGE_SIZE 0x1000
 #define GUEST_PHYSICAL_PAGE_FLAG 0x07
 
 struct pagingLevel {

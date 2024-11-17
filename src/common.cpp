@@ -17,6 +17,11 @@ void print_to_serial(uint8_t* text, int size) {
 //  *val = *val | ((uint64_t)1 << pos);
 //}
 
+[[noreturn]] void kpanic() {
+  print_to_serial((uint8_t*)"Kernel Panic", 12);
+  while(true);
+}
+
 void kmemcpy(uint8_t* dest, const uint8_t* src, uint32_t size) {
   for(uint32_t i = 0; i < size; i++) {
     dest[i] = src[i];

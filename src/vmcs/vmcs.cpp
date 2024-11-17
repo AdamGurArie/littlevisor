@@ -10,10 +10,26 @@
 #include <cstdio>
 #include <math.h>
 #include <bit>
+#include <string>
 
 #define QUANTOM 10
+#define INSTRUCTION_VMRUN_INTERCEPT (1 << 0)
 
-static uint32_t list_of_ports_to_intercept[] = {}; //{0x1f7};
+#define CR0_NOT_WRITE_THROUGH (1 << 29)
+#define CR0_CACHE_DISABLE (1 << 30)
+
+#define RIP_INIT_VALUE 0x8000
+
+#define RFLAGS_DEFAULT_INIT_VAL (1 << 1)
+
+#define EFER_SVM_ENABLE (1 << 12)
+
+#define INTERCEPT_EXCEPTION_NMI (1 << 3)
+#define INTERCEPT_EXCEPTION_BP (1 << 4)
+#define INTERCEPT_EXCEPTION_PF (1 << 15)
+
+
+static uint32_t list_of_ports_to_intercept[] = {0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f5, 0x1f6, 0x1f7, 0xE9};
 static uint64_t vmcb_addr = 0;
 static context guests[10] = {};
 static uint64_t guests_count = 0;
@@ -69,33 +85,6 @@ void vmrun(uint64_t vmcb_addr) {
   // 2. scheduale next vm
 }
 
-void add_guest(uint64_t entry_point, segment_selector cs) {
-  guests[guests_count].guest = vmcb_state_save_area {};
-  guests[guests_count].guest.cs = cs;
-  guests[guests_count].guest.rip = entry_point;
-  guests[guests_count].guest.rflags = 0;
-  guests[guests_count].guest.rax = 0;
-  guests[guests_count].guest.ss = segment_selector{.selector = 0, .attrib = 0, .limit = 0, .base = 0 }; 
-  guests[guests_count].guest.rsp = 0;
-  guests[guests_count].guest.cr0 = 0;
-  guests[guests_count].guest.cr2 = 0;
-  guests[guests_count].guest.cr3 = 0;
-  guests[guests_count].guest.cr4 = 0;
-  guests[guests_count].guest.efer = 0;
-  guests[guests_count].guest.idtr = segment_selector{.selector = 0, .attrib = 0, .limit = 0, .base = 0 };
-  guests[guests_count].guest.gdtr = segment_selector{.selector = 0, .attrib = 0, .limit = 0, .base = 0 }; 
-  guests[guests_count].guest.es = segment_selector{.selector = 0, .attrib = 0, .limit = 0, .base = 0 }; 
-  guests[guests_count].guest.ds = segment_selector{.selector = 0, .attrib = 0, .limit = 0, .base = 0 }; 
-  guests[guests_count].guest.dr6 = 0;
-  guests[guests_count].guest.dr7 = 0;
-  guests[guests_count].guest.cpl = 0;
-
-  uint64_t new_pagedir = kpalloc();
-  save_host_pageMap();
-  switch_pageMap(new_pagedir);
-  create_linear_virtual_space(MEMORY_SPACE_PER_VM);
-}
-
 void scheduale() {
   quantom_counter++;
   if(quantom_counter >= 10) {
@@ -105,149 +94,190 @@ void scheduale() {
   }
 }
 
-void init_vm() {
+void context_switching(uint16_t curr_guest, uint16_t next_guest) {
+  if(curr_guest >= 100 || next_guest >= 100) {
+    return;
+  }
+
+  vmcb* vmcb_struct = (vmcb*)TO_HIGHER_HALF(vmcb_addr);
+  kmemcpy(
+      (uint8_t*)&guests[curr_guest].guest,
+      (uint8_t*)&vmcb_struct->state_save_area,
+      sizeof(vmcb_struct->state_save_area)
+  );
+
+  guests[curr_guest].guest_cr3 = vmcb_struct->control.n_cr3;
+  guests[curr_guest].guest_asid = vmcb_struct->control.guest_asid;
+
+  kmemcpy(
+      (uint8_t*)&vmcb_struct->state_save_area,
+      (uint8_t*)&guests[next_guest].guest,
+      sizeof(vmcb_struct->state_save_area)
+  );
+
+  vmcb_struct->control.n_cr3 = guests[next_guest].guest_cr3;
+  vmcb_struct->control.guest_asid = guests[next_guest].guest_asid;
+
+  vmrun(vmcb_addr);
+}
+
+void init_guest_state(uint16_t guest_idx, const char* codefile) {
+  guests[guest_idx].guest.cs.selector = 0xF000;
+  guests[guest_idx].guest.cs.base = 0xFFFF0000;
+  guests[guest_idx].guest.cs.limit = 0xFFFF;
+  guests[guest_idx].guest.cs.attrib = 0x93;
+
+  guests[guest_idx].guest.ds.selector = 0x0;
+  guests[guest_idx].guest.ds.base = 0x0;
+  guests[guest_idx].guest.ds.limit = 0xFFFF;
+  guests[guest_idx].guest.ds.attrib = 0x93;
+
+  guests[guest_idx].guest.es.selector = 0x0;
+  guests[guest_idx].guest.es.base = 0x0;
+  guests[guest_idx].guest.es.limit = 0x0;
+  guests[guest_idx].guest.es.attrib = 0x93;
+
+  guests[guest_idx].guest.gs.selector = 0x0;
+  guests[guest_idx].guest.gs.base = 0x0;
+  guests[guest_idx].guest.gs.limit = 0xFFFF;
+  guests[guest_idx].guest.gs.attrib = 0x93;
+
+  guests[guest_idx].guest.fs.selector = 0x0;
+  guests[guest_idx].guest.fs.base = 0x0;
+  guests[guest_idx].guest.fs.limit = 0xFFFF;
+  guests[guest_idx].guest.fs.attrib = 0x93;
+
+  guests[guest_idx].guest.ss.selector = 0x0;
+  guests[guest_idx].guest.ss.base = 0x0;
+  guests[guest_idx].guest.ss.limit = 0xFFFF;
+  guests[guest_idx].guest.ss.attrib = 0x93;
+
+  guests[guest_idx].guest.gdtr.selector = 0x0;
+  guests[guest_idx].guest.gdtr.base = 0x0;
+  guests[guest_idx].guest.gdtr.limit = 0xFFFF;
+  guests[guest_idx].guest.gdtr.attrib = 0x0;
+
+  guests[guest_idx].guest.idtr.selector = 0x0;
+  guests[guest_idx].guest.idtr.base = 0x0;
+  guests[guest_idx].guest.idtr.limit = 0x1FFF;
+  guests[guest_idx].guest.idtr.attrib = 0x0;
+
+  guests[guest_idx].guest.ldtr.selector = 0x0;
+  guests[guest_idx].guest.ldtr.base = 0x0;
+  guests[guest_idx].guest.ldtr.limit = 0xFFFF;
+  guests[guest_idx].guest.ldtr.attrib = 0x82;
+
+  guests[guest_idx].guest.tr.selector = 0x0;
+  guests[guest_idx].guest.tr.base = 0x0;
+  guests[guest_idx].guest.tr.limit = 0xFFFF;
+  guests[guest_idx].guest.tr.attrib = 0x83;
+
+  guests[guest_idx].guest.rip = RIP_INIT_VALUE;
+  guests[guest_idx].guest.cr0 = CR0_CACHE_DISABLE | CR0_NOT_WRITE_THROUGH;
+  guests[guest_idx].guest.rflags = RFLAGS_DEFAULT_INIT_VAL;
+  guests[guest_idx].guest.efer = EFER_SVM_ENABLE;
+
+  guests[guest_idx].guest.dr6 = 0xFFFF0FF0;
+  guests[guest_idx].guest.dr7 = 0x400;
+
+  uint64_t vm_mem_map = create_clean_virtual_space();
+  guests[guest_idx].guest_cr3 = vm_mem_map;
+  guests[guest_idx].guest_asid = guest_idx;
+
+  storage_device* storage_dev = new virtual_storage_device("storage", 512);
+  guests[guest_idx].ata_device = new ata_pio_device(storage_dev);
+  
+  uint32_t file_handle = vopenFile(codefile);
+  uint64_t file_size = vgetFileSize(file_handle); 
+  uint32_t num_of_pages = (file_size + PAGE_SIZE - 1) / PAGE_SIZE;
+
+  uint64_t base_addr = guests[guest_idx].guest.rip + guests[guest_idx].guest.cs.base;
+  for(uint32_t i = 0; i < num_of_pages; i++) {
+    uint64_t phys_page = kpalloc();
+    mapPage(
+        phys_page,
+        base_addr + i * PAGE_SIZE,
+        GUEST_PHYSICAL_PAGE_FLAG,
+        vm_mem_map
+    );
+
+    uint32_t size_to_read = (file_size - i * PAGE_SIZE) > PAGE_SIZE ? PAGE_SIZE : (file_size - i * PAGE_SIZE);
+    vreadFile(
+        file_handle,
+        (char*)TO_HIGHER_HALF(phys_page),
+        size_to_read
+    );
+  }
+}
+
+void init_host() {
   // allocate memory for the vmcb
-  uint64_t cr3_val = 0;
-  asm volatile("mov %%cr3, %0" : "=r"(cr3_val));
   vmcb_addr = kpalloc();
+  if(vmcb_addr == 0) {
+    kpanic();
+  }
+
   vmcb* vmcb_struct = (vmcb*)TO_HIGHER_HALF(vmcb_addr);
   kmemset((uint8_t*)TO_HIGHER_HALF(vmcb_addr), 0x0, sizeof(vmcb));
 
   uint64_t host_state_area = kpalloc();
+  if(host_state_area == 0) {
+    kpanic();
+  }
+
   kmemset((uint8_t*)TO_HIGHER_HALF(host_state_area), 0x0, 0x1000);
-  // asm volatile("wrmsr" :: "c"(0xC0010117), "a"(host_state_area & 0xFFFFFFFF), "d"(host_state_area >> 32));
   wrmsr(0xC0010117, host_state_area);
 
   // init ioio map
   ioio_map_addr = kpalloc_contignious(3);
+  if(ioio_map_addr == 0) {
+    kpanic();
+  }
+
   for(auto i : list_of_ports_to_intercept) {
     uint32_t byte = i / 8;
-    uint32_t bit = i % 8;
-    uint64_t* ioio_map_ptr = (uint64_t*)TO_HIGHER_HALF(ioio_map_addr);
+    uint8_t bit = i % 8;
+    uint8_t* ioio_map_ptr = (uint8_t*)TO_HIGHER_HALF(ioio_map_addr);
     setbit(&ioio_map_ptr[byte], bit);
-  }
-  // check if this actually goes to the right place
-  vmcb_struct->control.intercepts_insts_2 = (1 << 0);
+  } 
+  // kmemset((uint8_t*)TO_HIGHER_HALF(ioio_map_addr), 0xFF, 0x1000*3);
+  vmcb_struct->control.intercepts_insts_1 = (1 << 27);
+
+  vmcb_struct->control.intercepts_insts_2 = INSTRUCTION_VMRUN_INTERCEPT;
 
   // init msr 
   msrpm_base_addr = kpalloc_contignious(2);
-  kmemset((uint8_t*)TO_HIGHER_HALF(msrpm_base_addr), 0x0, 0x1000);
-  
+  if(msrpm_base_addr == 0) {
+    kpanic();
+  }
+
+  kmemset((uint8_t*)TO_HIGHER_HALF(msrpm_base_addr), 0x0, 0x1000); 
   vmcb_struct->control.intercept_exceptions = 0x0;
-  // init vmcb struct with the right paramemeters
-  vmcb_struct->state_save_area.cs.selector = 0xF000;
-  vmcb_struct->state_save_area.cs.base = 0xFFFF0000;
-  vmcb_struct->state_save_area.cs.limit = 0xFFFF;
-  vmcb_struct->state_save_area.cs.attrib = 0x93;
-
-  vmcb_struct->state_save_area.ds.selector = 0x0;
-  vmcb_struct->state_save_area.ds.base = 0x0;
-  vmcb_struct->state_save_area.ds.limit = 0xFFFF;
-  vmcb_struct->state_save_area.ds.attrib = 0x93;
-
-  vmcb_struct->state_save_area.es.selector = 0x0;
-  vmcb_struct->state_save_area.es.base = 0x0;
-  vmcb_struct->state_save_area.es.limit = 0xFFFF;
-  vmcb_struct->state_save_area.es.attrib = 0x93;
-
-  vmcb_struct->state_save_area.gs.selector = 0x0;
-  vmcb_struct->state_save_area.gs.base = 0x0;
-  vmcb_struct->state_save_area.gs.limit = 0xFFFF;
-  vmcb_struct->state_save_area.gs.attrib = 0x93;
-
-  vmcb_struct->state_save_area.fs.selector = 0x0;
-  vmcb_struct->state_save_area.fs.base = 0x0;
-  vmcb_struct->state_save_area.fs.limit = 0xFFFF;
-  vmcb_struct->state_save_area.fs.attrib = 0x93;
-
-  vmcb_struct->state_save_area.ss.selector = 0x0;
-  vmcb_struct->state_save_area.ss.base = 0x0;
-  vmcb_struct->state_save_area.ss.limit = 0xFFFF;
-  vmcb_struct->state_save_area.ss.attrib = 0x93;
-
-  vmcb_struct->state_save_area.gdtr.base = 0x0;
-  vmcb_struct->state_save_area.gdtr.limit = 0xFFFF;
-  vmcb_struct->state_save_area.gdtr.attrib = 0x0;
-  vmcb_struct->state_save_area.gdtr.selector = 0x0;
-
-  vmcb_struct->state_save_area.idtr.selector = 0x0;
-  vmcb_struct->state_save_area.idtr.base = 0x0;
-  vmcb_struct->state_save_area.idtr.limit = 0x1FFF;
-  vmcb_struct->state_save_area.idtr.attrib = 0x0;
-
-  vmcb_struct->state_save_area.ldtr.selector = 0x0;
-  vmcb_struct->state_save_area.ldtr.base = 0x0;
-  vmcb_struct->state_save_area.ldtr.limit = 0xFFFF;
-  vmcb_struct->state_save_area.ldtr.attrib = 0x82;
-
-  vmcb_struct->state_save_area.tr.selector = 0x0;
-  vmcb_struct->state_save_area.tr.base = 0x0;
-  vmcb_struct->state_save_area.tr.limit = 0xFFFF;
-  vmcb_struct->state_save_area.tr.attrib = 0x83;
-
-  vmcb_struct->state_save_area.rip = 0x8000;
-  vmcb_struct->state_save_area.cr0 = (1 << 29) | (1 << 30); // | (1 << 4);
-  vmcb_struct->state_save_area.cr2 = 0x0;
-  vmcb_struct->state_save_area.cr3 = 0x0;
-  vmcb_struct->state_save_area.cr4 = 0x0;
-  vmcb_struct->state_save_area.rflags = 1 << 1;
-  vmcb_struct->state_save_area.efer = (1 << 12);
-  vmcb_struct->state_save_area.rax = 0x0;
-  vmcb_struct->control.interrupt_shadow = 0x0;
-  vmcb_struct->state_save_area.rsp = 0x0;
-  vmcb_struct->state_save_area.dr6 = 0xFFFF0FF0;
-  vmcb_struct->state_save_area.dr7 = 0x400;
-  vmcb_struct->state_save_area.rsp = 0x0;
-
-  // vmcb_struct->control.nrip = 0xFFF0;
   vmcb_struct->control.np_enable = 1;
 
-  vmcb_struct->control.guest_asid = 4;
   vmcb_struct->control.iopm_base_pa = ioio_map_addr;
   vmcb_struct->control.msrpm_base_pa = msrpm_base_addr;
   vmcb_struct->control.intercept_cr_reads = 1;
   vmcb_struct->control.intercepts_cr_writes = 1;
-
-  vmcb_struct->control.intercept_exceptions = (1 << 1) | (1 << 6) | (1 << 14) | (1 << 17) | (1 << 18);
-  vmcb_struct->control.intercept_exceptions &= ~((1 << 14) | (1 << 6));
-  vmcb_struct->control.tlb_control = 0x0;
-  vmcb_struct->control.vmcb_clean_bits = 0;
-
-  // load coreboot to memory address starting with RIP
-  uint32_t fd = vopenFile((char*)"vm_test.bin"); 
-  //map to rip address
-  uint32_t file_size = vgetFileSize(fd);
-  uint32_t num_of_pages = (file_size + 0x1000 - 1) / 0x1000;
-  uint64_t vm_mem_map = create_clean_virtual_space();
-  
-  uint64_t boot_base_addr = vmcb_struct->state_save_area.cs.base + vmcb_struct->state_save_area.rip;
-  for(uint32_t i = 0; i < num_of_pages; i++) {
-    uint64_t coreboot_page = kpalloc();
-    mapPage(coreboot_page + i * 0x1000,
-             boot_base_addr + i * 0x1000,
-             0x7,
-             vm_mem_map);
-
-    vreadFile(fd, (char*)(TO_HIGHER_HALF(coreboot_page)), 0x1000);
-    // vmcb_struct->state_save_area.rip = coreboot_page;
-  }
-
-  // identity_map(vm_mem_map, 0xffff8000, 0x1000, 0x7);
-   
-  vmcb_struct->control.n_cr3 = vm_mem_map;
+  vmcb_struct->control.intercept_exceptions = INTERCEPT_EXCEPTION_NMI | INTERCEPT_EXCEPTION_PF;
 
   // create ide virtual driver
   // virtual_storage_device* storage_dev = new virtual_storage_device((char*)"ide_disk", 512);
   // ata_pio_device* ata_device = new ata_pio_device(storage_dev); 
   // create virtual cmos 
   // vmrun
-  
+}
+
+void init_vm() {
   enable_svm();
-  vmrun(vmcb_addr);           // MUST DEBUG WITH STEPI!!!!!!
+  init_host();
+  init_guest_state(1, "vm_test.bin");
+  context_switching(0, 1);
+  vmexit_handler();
 }
 
 void vmexit_handler() {
-  vmcb* vmcb_struct = (vmcb*)vmcb_addr;
+  vmcb* vmcb_struct = (vmcb*)(TO_HIGHER_HALF(vmcb_addr));
   switch(vmcb_struct->control.exitcode) {
     case VMEXIT_IOIO : {
       handle_ioio_vmexit(); 
@@ -261,7 +291,7 @@ void handle_ioio_vmexit() {
   // get the return value
   // return it to the destination register/address(if needed)
   // @TODO: add handling to REP prefix
-  vmcb* vmcb_struct = (vmcb*)vmcb_addr;
+  vmcb* vmcb_struct = (vmcb*)(TO_HIGHER_HALF(vmcb_addr));
   uint64_t exitinfo1_val = vmcb_struct->control.exitinfo1;
   ioio_exitinfo1* exitinfo1 = std::bit_cast<ioio_exitinfo1*>(&exitinfo1_val);
 

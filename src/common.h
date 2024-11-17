@@ -43,6 +43,9 @@ struct Stack
 //                           std::is_same_v<T, uint32_t>;
 
 //template<acceptable_types T>
+
+[[noreturn]] void kpanic();
+
 void write_to_port(uint16_t port, uint8_t data);
 void print_to_serial(uint8_t* text, int size);
 
@@ -68,6 +71,10 @@ inline void clearbit(uint8_t* val, uint8_t pos) {
 
 inline void setbit(uint64_t* val, uint8_t pos) {
   *val = *val | ((uint64_t)1 << pos);
+}
+
+inline void setbit(uint8_t* val, uint8_t pos) {
+  *val = *val | ((uint8_t)1 << pos);
 }
 
 inline uint8_t getbit(uint64_t* val, uint8_t pos) {

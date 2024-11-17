@@ -138,6 +138,7 @@ struct vmcb {
 struct context {
   vmcb_state_save_area guest;
   uint64_t guest_cr3;
+  uint32_t guest_asid;
   ata_pio_device* ata_device;
 };
 
@@ -294,6 +295,7 @@ void scheduale();
 void store_vmcb_guest();
 void vmrun(uint64_t vmcb_addr);
 void init_vm();
+void init_host();
 void vmexit_handler();
 void handle_ioio_vmexit();
 void edit_vmcb_state(vmcb_registers reg, uint64_t value);

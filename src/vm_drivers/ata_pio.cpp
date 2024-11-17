@@ -2,6 +2,7 @@
 #include "../kheap.h"
 #include "../common.h"
 #include "../vmcs/vmcs.h"
+#include "../fs/vfs.h"
 #include <cstdint>
 #include <cstdlib>
 
@@ -256,4 +257,36 @@ void ata_pio_device::handle_write_sectors() {
     storage_dev->write_sector(&this->transfer_buff[offset], sector + i, 1);
     offset += sector_size;
   }
+}
+
+uint8_t virtual_storage_device::read_sector(uint32_t sector_number, uint8_t* buff) {
+  uint32_t fd = vopenFile(this->file_name);
+  vseekp(fd, sector_number * this->sector_size);
+  vreadFile(fd, (char*)buff, this->sector_size);
+  return 0;
+}
+
+uint8_t virtual_storage_device::write_sector(uint32_t sector_number, uint8_t* buff) {
+  uint32_t fd = vopenFile(this->file_name);
+  vseekp(fd, sector_number * this->sector_size);
+  vreadFile(fd, (char*)buff, this->sector_size);
+  return 0;
+}
+
+uint8_t virtual_storage_device::read_data(uint8_t* buff, uint32_t offset, uint32_t size) {
+  uint32_t fd = vopenFile(this->file_name);
+  vseekp(fd, offset);
+  vreadFile(fd, (char*)buff, size);
+  return 0;
+}
+
+uint8_t virtual_storage_device::write_data(uint8_t* buff, uint32_t offset, uint32_t size) {
+  uint32_t fd = vopenFile(this->file_name);
+  vseekp(fd, offset);
+  vreadFile(fd, (char*)buff, size);
+  return 0;
+}
+
+uint64_t virtual_storage_device::get_sector_size() {
+  return this->sector_size;
 }

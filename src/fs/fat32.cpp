@@ -2,6 +2,7 @@
 #include "../kheap.h"
 
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -187,19 +188,39 @@ uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
     return 1;
   }
 
-  uint8_t file_buff[file_desc.size_in_bytes];
+  uint8_t file_buff[size];
   kmemset(file_buff, 0x0, file_desc.size_in_bytes);
   uint32_t fat_entry = file_desc.first_clust_low | (file_desc.first_clust_high >> 16);
   uint32_t offset = 0;
+  uint32_t curr_sector = cluster_to_sector(fat_entry);
+
+  while(fat_entry < 0x0FFFFFF8 && curr_sector * SECTOR_SIZE < pos) {
+    if(curr_sector * SECTOR_SIZE >= pos) {
+      storage_dev->read_data(
+            file_buff + offset,
+            curr_sector * SECTOR_SIZE + offset,
+            curr_sector * SECTOR_SIZE - pos
+      );
+
+      offset += bpb_struct.sectors_per_clusted * SECTOR_SIZE - pos;
+      break;
+    }
+  }
+
   while(fat_entry < 0x0FFFFFF8 && offset < file_desc.size_in_bytes) {
     uint32_t sector = cluster_to_sector(fat_entry);
     uint32_t size_to_read = file_desc.size_in_bytes - offset > 512 ? 512 : file_desc.size_in_bytes - offset;
-    storage_dev->read_data(file_buff + offset, sector*SECTOR_SIZE + offset, size_to_read);
+    storage_dev->read_data(
+        file_buff + offset,
+        sector*SECTOR_SIZE + offset,
+        size_to_read
+    );
+
     fat_entry = getEntryByCluster(fat_entry);
     offset += size_to_read;
   }
 
-  kmemcpy(buff + pos, file_buff, size);
+  kmemcpy(buff, file_buff, size);
 
   return 0;
 }

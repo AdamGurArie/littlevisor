@@ -91,11 +91,11 @@ class ata_pio_device {
 class virtual_storage_device : public storage_device {
   private:
     uint32_t sector_size;
-    char* file_name;
+    const char* file_name;
 
   public:
 
-  virtual_storage_device(char* file_name, uint32_t sector_size) : sector_size(sector_size), file_name(file_name) {};
+  virtual_storage_device(const char* file_name, uint32_t sector_size) : sector_size(sector_size), file_name(file_name) {};
   uint8_t read_sector(uint32_t sector_number, uint8_t* buff);
   uint8_t write_sector(uint32_t sector_number, uint8_t* buff);
   uint8_t read_data(uint8_t* buff, uint32_t offset, uint32_t size);

@@ -29,7 +29,7 @@
 #define INTERCEPT_EXCEPTION_PF (1 << 15)
 
 
-static uint32_t list_of_ports_to_intercept[] = {0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f5, 0x1f6, 0x1f7, 0xE9};
+static uint32_t list_of_ports_to_intercept[] = {0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f5, 0x1f6, 0x1f7};
 static uint64_t vmcb_addr = 0;
 static context guests[10] = {};
 static uint64_t guests_count = 0;
@@ -117,7 +117,8 @@ void context_switching(uint16_t curr_guest, uint16_t next_guest) {
 
   vmcb_struct->control.n_cr3 = guests[next_guest].guest_cr3;
   vmcb_struct->control.guest_asid = guests[next_guest].guest_asid;
-
+  
+  curr_guest_idx = next_guest;
   vmrun(vmcb_addr);
 }
 
@@ -184,7 +185,7 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
   guests[guest_idx].guest_cr3 = vm_mem_map;
   guests[guest_idx].guest_asid = guest_idx;
 
-  storage_device* storage_dev = new virtual_storage_device("storage", 512);
+  storage_device* storage_dev = new virtual_storage_device(const_cast<const char*>("storage"), 512);
   guests[guest_idx].ata_device = new ata_pio_device(storage_dev);
   
   uint32_t file_handle = vopenFile(codefile);
@@ -271,9 +272,13 @@ void init_host() {
 void init_vm() {
   enable_svm();
   init_host();
-  init_guest_state(1, "vm_test.bin");
+  init_guest_state(1, "coreboot.rom");
   context_switching(0, 1);
-  vmexit_handler();
+  while(true) {
+    // context_switching(0, 1);
+    vmexit_handler();
+    vmrun(vmcb_addr);
+  }
 }
 
 void vmexit_handler() {
@@ -302,7 +307,7 @@ void handle_ioio_vmexit() {
       //uint32_t port = exitinfo1->port;
       //operands_decoding inst_decode = decode_in(vmcb_struct->state_save_area.rip);
       ide_transaction transaction{.exitinfo = *exitinfo1, .written_val = 0};
-      if(exitinfo1->type == 1) {
+      if(exitinfo1->type == 0) {
         transaction.written_val = vmcb_struct->state_save_area.rax;
       }
 
@@ -324,10 +329,11 @@ void inject_event(uint8_t vector, event_type_e type, uint8_t push_error_code, ui
 }
 
 void edit_vmcb_state(vmcb_registers reg, uint64_t value) {
-  vmcb* vmcb_struct = (vmcb*)vmcb_addr;
+  vmcb* vmcb_struct = (vmcb*)TO_HIGHER_HALF(vmcb_addr);
   switch (reg) {
     case RAX:
       vmcb_struct->state_save_area.rax = value;
+      guests[curr_guest_idx].guest.rax = value;
 
     default:
       break;

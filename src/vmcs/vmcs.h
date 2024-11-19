@@ -12,8 +12,6 @@
 
 enum vmcb_registers {
   RAX,
-  RCX,
-  RBX
 };
 
 enum event_type_e {

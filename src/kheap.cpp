@@ -41,6 +41,7 @@ void* kmalloc(uint64_t size) {
   new_chunk->state = FREE;
   new_chunk->next_chunk = last_free_chunk->next_chunk;
   last_free_chunk->state = OCCUPIED;
+  last_free_chunk->next_chunk = new_chunk;
   last_free_chunk = new_chunk;
 
   return (void*)chunk_addr;
@@ -53,10 +54,12 @@ void kfree(void* addr) {
     if((uint64_t)curr_chunk + sizeof(FREELIST_CHUNK) == (uint64_t)addr) {
 
       curr_chunk->state = FREE;
-      checkConsolidate(curr_chunk);
+      //checkConsolidate(curr_chunk);
 
       return;
     }
+
+    curr_chunk = curr_chunk->next_chunk;
   }
 
   return;

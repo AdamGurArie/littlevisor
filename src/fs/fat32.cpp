@@ -45,9 +45,14 @@ uint32_t getEntryByCluster(uint32_t cluster) {
   uint32_t fat_sector = bpb_struct.num_of_reserved_sectors + (cluster / SECTOR_SIZE);
   uint32_t entry_offset = cluster % SECTOR_SIZE;
   uint8_t* sector_buff = (uint8_t*)kmalloc(storage_dev->get_sector_size());
-  storage_dev->read_sector(sector_buff, fat_sector*SECTOR_SIZE, 1);
+  if(sector_buff == NULL) {
+    return -1;
+  }
+
+  storage_dev->read_sector(sector_buff, fat_sector, 1);
   uint32_t fat_entry = 0;
   kmemcpy((uint8_t*)&fat_entry, &sector_buff[entry_offset], sizeof(uint32_t));
+  kfree(sector_buff);
   return fat_entry;
 }
 
@@ -188,14 +193,18 @@ uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
     return 1;
   }
 
-  uint8_t file_buff[size];
-  kmemset(file_buff, 0x0, file_desc.size_in_bytes);
+  uint8_t* file_buff = buff;
+  if(size > file_desc.size_in_bytes) {
+    size = file_desc.size_in_bytes;
+  }
+
+  kmemset(file_buff, 0x0, size);
   uint32_t fat_entry = file_desc.first_clust_low | (file_desc.first_clust_high >> 16);
   uint32_t offset = 0;
   uint32_t curr_sector = cluster_to_sector(fat_entry);
 
-  while(fat_entry < 0x0FFFFFF8 && curr_sector * SECTOR_SIZE < pos) {
-    if(curr_sector * SECTOR_SIZE >= pos) {
+  while(fat_entry < 0x0FFFFFF8) {
+    if(curr_sector * SECTOR_SIZE >= pos && curr_sector * SECTOR_SIZE < size) {
       storage_dev->read_data(
             file_buff + offset,
             curr_sector * SECTOR_SIZE + offset,
@@ -204,12 +213,14 @@ uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
 
       offset += bpb_struct.sectors_per_clusted * SECTOR_SIZE - pos;
       break;
+    } else if(curr_sector * SECTOR_SIZE > size) {
+      break;
     }
   }
 
-  while(fat_entry < 0x0FFFFFF8 && offset < file_desc.size_in_bytes) {
+  while(fat_entry < 0x0FFFFFF8 && offset < size) {
     uint32_t sector = cluster_to_sector(fat_entry);
-    uint32_t size_to_read = file_desc.size_in_bytes - offset > 512 ? 512 : file_desc.size_in_bytes - offset;
+    uint32_t size_to_read = size - offset > 512 ? 512 : size - offset;
     storage_dev->read_data(
         file_buff + offset,
         sector*SECTOR_SIZE + offset,

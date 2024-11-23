@@ -80,6 +80,15 @@ uint32_t vseekp(uint32_t fd, uint32_t new_pos) {
   return 0;
 }
 
+uint32_t vseekr(uint32_t fd, uint32_t forward) {
+  if(fd >= 100) {
+    return OPEN_FILE_ERROR;
+  }
+
+  file_descriptor_list[fd].position += forward;
+  return 0;
+}
+
 uint32_t vgetFileSize(uint32_t fd) {
   if(fd >= 100) {
     return OPEN_FILE_ERROR;

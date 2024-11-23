@@ -202,9 +202,11 @@ uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
   uint32_t fat_entry = file_desc.first_clust_low | (file_desc.first_clust_high >> 16);
   uint32_t offset = 0;
   uint32_t curr_sector = cluster_to_sector(fat_entry);
-
+  
+  uint32_t count_of_file_sectors = 0;
   while(fat_entry < 0x0FFFFFF8) {
-    if(curr_sector * SECTOR_SIZE >= pos && curr_sector * SECTOR_SIZE < size) {
+    count_of_file_sectors += bpb_struct.sectors_per_clusted;
+    if(count_of_file_sectors * SECTOR_SIZE >= pos && curr_sector * SECTOR_SIZE < size) {
       storage_dev->read_data(
             file_buff + offset,
             curr_sector * SECTOR_SIZE + offset,
@@ -213,7 +215,7 @@ uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
 
       offset += bpb_struct.sectors_per_clusted * SECTOR_SIZE - pos;
       break;
-    } else if(curr_sector * SECTOR_SIZE > size) {
+    } else if(count_of_file_sectors * SECTOR_SIZE > size) {
       break;
     }
   }

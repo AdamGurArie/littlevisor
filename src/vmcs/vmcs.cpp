@@ -173,7 +173,7 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
   guests[guest_idx].guest.tr.limit = 0xFFFF;
   guests[guest_idx].guest.tr.attrib = 0x83;
 
-  guests[guest_idx].guest.rip = RIP_INIT_VALUE;
+  guests[guest_idx].guest.rip = 0x8000 - 16; //RIP_INIT_VALUE;
   guests[guest_idx].guest.cr0 = CR0_CACHE_DISABLE | CR0_NOT_WRITE_THROUGH;
   guests[guest_idx].guest.rflags = RFLAGS_DEFAULT_INIT_VAL;
   guests[guest_idx].guest.efer = EFER_SVM_ENABLE;
@@ -189,15 +189,19 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
   guests[guest_idx].ata_device = new ata_pio_device(storage_dev);
   
   uint32_t file_handle = vopenFile(codefile);
+  if(file_handle == OPEN_FILE_ERROR) {
+    kpanic();
+  }
+
   uint64_t file_size = vgetFileSize(file_handle); 
   uint32_t num_of_pages = (file_size + PAGE_SIZE - 1) / PAGE_SIZE;
+  uint64_t bootloader_high_addr = 0xffff8000; 
 
-  uint64_t base_addr = guests[guest_idx].guest.rip + guests[guest_idx].guest.cs.base;
-  for(uint32_t i = 0; i < num_of_pages; i++) {
+  for(int64_t i = num_of_pages-1; i > 0; i--) {
     uint64_t phys_page = kpalloc();
     mapPage(
         phys_page,
-        base_addr + i * PAGE_SIZE,
+        bootloader_high_addr - i * PAGE_SIZE,
         GUEST_PHYSICAL_PAGE_FLAG,
         vm_mem_map
     );
@@ -208,7 +212,21 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
         (char*)TO_HIGHER_HALF(phys_page),
         size_to_read
     );
+    vseekr(file_handle, PAGE_SIZE);
   }
+
+  //uint64_t phys_page = kpalloc();
+  //mapPage(phys_page, 0xFFFF8000, 0x7, vm_mem_map);
+
+  /*for(uint64_t i = 0; i < bootloader_base_addr; i += 0x1000) {
+    uint64_t phys_page = kpalloc();
+    mapPage(
+        phys_page,
+        i,
+        GUEST_PHYSICAL_PAGE_FLAG, 
+        vm_mem_map
+    );
+  }*/
 }
 
 void init_host() {
@@ -253,14 +271,14 @@ void init_host() {
   }
 
   kmemset((uint8_t*)TO_HIGHER_HALF(msrpm_base_addr), 0x0, 0x1000); 
-  vmcb_struct->control.intercept_exceptions = 0x0;
+  vmcb_struct->control.intercept_exceptions = 0xFFFFFFFF;
   vmcb_struct->control.np_enable = 1;
 
   vmcb_struct->control.iopm_base_pa = ioio_map_addr;
   vmcb_struct->control.msrpm_base_pa = msrpm_base_addr;
   vmcb_struct->control.intercept_cr_reads = 1;
   vmcb_struct->control.intercepts_cr_writes = 1;
-  vmcb_struct->control.intercept_exceptions = INTERCEPT_EXCEPTION_NMI | INTERCEPT_EXCEPTION_PF;
+  // vmcb_struct->control.intercept_exceptions = INTERCEPT_EXCEPTION_NMI | INTERCEPT_EXCEPTION_PF;
 
   // create ide virtual driver
   // virtual_storage_device* storage_dev = new virtual_storage_device((char*)"ide_disk", 512);
@@ -272,7 +290,7 @@ void init_host() {
 void init_vm() {
   enable_svm();
   init_host();
-  init_guest_state(1, "coreboot.rom");
+  init_guest_state(1, "bios12.bin");
   context_switching(0, 1);
   while(true) {
     // context_switching(0, 1);

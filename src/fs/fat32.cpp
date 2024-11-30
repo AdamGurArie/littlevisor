@@ -202,35 +202,45 @@ uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
   uint32_t fat_entry = file_desc.first_clust_low | (file_desc.first_clust_high >> 16);
   uint32_t offset = 0;
   uint32_t curr_sector = cluster_to_sector(fat_entry);
-  
-  uint32_t count_of_file_sectors = 0;
-  while(fat_entry < 0x0FFFFFF8) {
-    count_of_file_sectors += bpb_struct.sectors_per_clusted;
-    if(count_of_file_sectors * SECTOR_SIZE >= pos && curr_sector * SECTOR_SIZE < size) {
-      storage_dev->read_data(
-            file_buff + offset,
-            curr_sector * SECTOR_SIZE + offset,
-            curr_sector * SECTOR_SIZE - pos
-      );
+  uint32_t first_clust_of_data = pos / (bpb_struct.sectors_per_clusted * SECTOR_SIZE);
+  uint32_t offset_of_data = pos % (bpb_struct.sectors_per_clusted * SECTOR_SIZE);
 
-      offset += bpb_struct.sectors_per_clusted * SECTOR_SIZE - pos;
-      break;
-    } else if(count_of_file_sectors * SECTOR_SIZE > size) {
-      break;
+  for(uint32_t i = 0; i < first_clust_of_data; i++) {
+    fat_entry = getEntryByCluster(fat_entry);
+    if(fat_entry == 0x0FFFFFF8) {
+      return 1;
     }
+  }
+  
+  if(offset_of_data > 0) {
+    uint32_t sector = cluster_to_sector(fat_entry);
+    storage_dev->read_data(
+        file_buff,
+        sector * SECTOR_SIZE + offset_of_data,
+        SECTOR_SIZE - offset_of_data
+    );
+
+    offset += SECTOR_SIZE - offset_of_data;
+    fat_entry = getEntryByCluster(fat_entry);
   }
 
   while(fat_entry < 0x0FFFFFF8 && offset < size) {
     uint32_t sector = cluster_to_sector(fat_entry);
-    uint32_t size_to_read = size - offset > 512 ? 512 : size - offset;
-    storage_dev->read_data(
-        file_buff + offset,
-        sector*SECTOR_SIZE + offset,
-        size_to_read
-    );
+    for(uint32_t i = 0; i < bpb_struct.sectors_per_clusted; i++) {
+      uint32_t size_to_read = size - offset > 512 ? 512 : size - offset;
+      storage_dev->read_data(
+          file_buff + offset,
+          sector*SECTOR_SIZE,
+          size_to_read
+      );
+
+      offset += size_to_read;
+      if(offset >= size) {
+        break;
+      }
+    }
 
     fat_entry = getEntryByCluster(fat_entry);
-    offset += size_to_read;
   }
 
   kmemcpy(buff, file_buff, size);

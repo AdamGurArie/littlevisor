@@ -67,10 +67,12 @@ void _start() {
   limine_file* limine_f = module_request.response->modules[0];
   ramDisk* ramdisk = new ramDisk((uintptr_t)limine_f->address);
   init_fs(ramdisk);
-  char file_buff[4];
-  const char* file_name = "vm_test.bin";
+  char file_buff[16];
+  const char* file_name = "bios12.bin";
   uint32_t fd = vopenFile(file_name);
-  vreadFile(fd, file_buff, 4);
+  uint64_t file_size = vgetFileSize(fd);
+  vseekp(fd, file_size - 16);
+  vreadFile(fd, file_buff, 16);
   //kpalloc();
   init_vm();
 

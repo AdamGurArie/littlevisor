@@ -196,23 +196,25 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
   uint64_t file_size = vgetFileSize(file_handle); 
   uint32_t num_of_pages = (file_size + PAGE_SIZE - 1) / PAGE_SIZE;
   uint64_t bootloader_high_addr = 0xffff8000; 
-
-  for(int64_t i = num_of_pages-1; i > 0; i--) {
+  
+  uint64_t size_read = 0;
+  for(int64_t i = num_of_pages; i > 0; i--) {
     uint64_t phys_page = kpalloc();
     mapPage(
         phys_page,
-        bootloader_high_addr - i * PAGE_SIZE,
+        bootloader_high_addr - i * PAGE_SIZE + 16,
         GUEST_PHYSICAL_PAGE_FLAG,
         vm_mem_map
     );
 
-    uint32_t size_to_read = (file_size - i * PAGE_SIZE) > PAGE_SIZE ? PAGE_SIZE : (file_size - i * PAGE_SIZE);
+    uint32_t size_to_read = (file_size - size_read) > PAGE_SIZE ? PAGE_SIZE : (file_size - size_read);
     vreadFile(
         file_handle,
         (char*)TO_HIGHER_HALF(phys_page),
         size_to_read
     );
     vseekr(file_handle, PAGE_SIZE);
+    size_read += size_to_read;
   }
 
   //uint64_t phys_page = kpalloc();

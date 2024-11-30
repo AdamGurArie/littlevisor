@@ -26,7 +26,7 @@ void init_heap() {
   }
 
   first_chunk = (FREELIST_CHUNK*)heap_space;
-  first_chunk->next_chunk = (FREELIST_CHUNK*)(heap_space + 4 * 0x1000);
+  first_chunk->next_chunk = (FREELIST_CHUNK*)(heap_space + 4 * 0x1000 - sizeof(FREELIST_CHUNK));
   last_free_chunk = first_chunk;
 }
 
@@ -47,6 +47,17 @@ void* kmalloc(uint64_t size) {
   return (void*)chunk_addr;
 }
 
+void update_last_free_chunk() {
+  FREELIST_CHUNK* curr_chunk = first_chunk;
+  while(curr_chunk != 0 && curr_chunk->next_chunk != 0) {
+    if(curr_chunk->state == FREE) {
+      last_free_chunk = curr_chunk;
+    }
+
+    curr_chunk = curr_chunk->next_chunk;
+  }
+}
+
 void kfree(void* addr) {
   FREELIST_CHUNK* curr_chunk = first_chunk;
   while(curr_chunk != (FREELIST_CHUNK*)0x0) {
@@ -54,7 +65,8 @@ void kfree(void* addr) {
     if((uint64_t)curr_chunk + sizeof(FREELIST_CHUNK) == (uint64_t)addr) {
 
       curr_chunk->state = FREE;
-      //checkConsolidate(curr_chunk);
+      checkConsolidate(curr_chunk);
+      update_last_free_chunk();
 
       return;
     }
@@ -70,12 +82,21 @@ void checkConsolidate(FREELIST_CHUNK* chunk) {
     return;
   }
 
-  if((uint64_t)chunk->next_chunk == 0) {
+  FREELIST_CHUNK* prev_chunk = first_chunk;
+  while(prev_chunk->next_chunk != chunk && prev_chunk->next_chunk != (FREELIST_CHUNK*)0) {
+    prev_chunk = prev_chunk->next_chunk;
+  }
+
+  if((uint64_t)chunk->next_chunk == 0 || (uint64_t)chunk->next_chunk->next_chunk == 0) {
     return;
   }
 
   if(chunk->next_chunk->state == FREE) {
     chunk->next_chunk = chunk->next_chunk->next_chunk;
+  }
+
+  if(prev_chunk->state == FREE) {
+    prev_chunk->next_chunk = chunk->next_chunk;
   }
 
   return;

@@ -46,7 +46,7 @@ uint8_t ramDisk::write_data(uint8_t* buff, uint64_t offset, uint32_t size) {
       (uint8_t*)(this->disk_addr + offset),
       buff,
       size
-      );
+  );
 
   return 0;
 }

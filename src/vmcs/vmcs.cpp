@@ -18,7 +18,7 @@
 #define CR0_NOT_WRITE_THROUGH (1 << 29)
 #define CR0_CACHE_DISABLE (1 << 30)
 
-#define RIP_INIT_VALUE 0x8000
+#define RIP_INIT_VALUE 0xFFF0
 
 #define RFLAGS_DEFAULT_INIT_VAL (1 << 1)
 
@@ -173,7 +173,7 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
   guests[guest_idx].guest.tr.limit = 0xFFFF;
   guests[guest_idx].guest.tr.attrib = 0x83;
 
-  guests[guest_idx].guest.rip = 0x8000 - 16; //RIP_INIT_VALUE;
+  guests[guest_idx].guest.rip = RIP_INIT_VALUE;
   guests[guest_idx].guest.cr0 = CR0_CACHE_DISABLE | CR0_NOT_WRITE_THROUGH;
   guests[guest_idx].guest.rflags = RFLAGS_DEFAULT_INIT_VAL;
   guests[guest_idx].guest.efer = EFER_SVM_ENABLE;
@@ -195,14 +195,23 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
 
   uint64_t file_size = vgetFileSize(file_handle); 
   uint32_t num_of_pages = (file_size + PAGE_SIZE - 1) / PAGE_SIZE;
-  uint64_t bootloader_high_addr = 0xffff8000; 
+  uint64_t bootloader_high_addr = 0x100000000;
+  uint64_t isa_bootloader_high_addr = 0x100000;
+  uint64_t isa_bootloader_start_addr = isa_bootloader_high_addr - num_of_pages * PAGE_SIZE;
   
   uint64_t size_read = 0;
   for(int64_t i = num_of_pages; i > 0; i--) {
     uint64_t phys_page = kpalloc();
     mapPage(
         phys_page,
-        bootloader_high_addr - i * PAGE_SIZE + 16,
+        bootloader_high_addr - i * PAGE_SIZE,
+        GUEST_PHYSICAL_PAGE_FLAG,
+        vm_mem_map
+    );
+
+    mapPage(
+        phys_page,
+        isa_bootloader_high_addr - i * PAGE_SIZE, 
         GUEST_PHYSICAL_PAGE_FLAG,
         vm_mem_map
     );
@@ -215,6 +224,17 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
     );
     vseekr(file_handle, PAGE_SIZE);
     size_read += size_to_read;
+  }
+
+  for(uint64_t i = 0; i < isa_bootloader_start_addr; i+=0x1000) {
+    uint64_t phys_page = kpalloc();
+    kmemset((uint8_t*)TO_HIGHER_HALF(phys_page), 0x0, 0x1000);
+    mapPage(
+        phys_page,
+        i,
+        GUEST_PHYSICAL_PAGE_FLAG,
+        vm_mem_map
+    );
   }
 
   //uint64_t phys_page = kpalloc();
@@ -278,8 +298,8 @@ void init_host() {
 
   vmcb_struct->control.iopm_base_pa = ioio_map_addr;
   vmcb_struct->control.msrpm_base_pa = msrpm_base_addr;
-  vmcb_struct->control.intercept_cr_reads = 1;
-  vmcb_struct->control.intercepts_cr_writes = 1;
+  vmcb_struct->control.intercept_cr_reads = 0;
+  vmcb_struct->control.intercepts_cr_writes = 0;
   // vmcb_struct->control.intercept_exceptions = INTERCEPT_EXCEPTION_NMI | INTERCEPT_EXCEPTION_PF;
 
   // create ide virtual driver

@@ -11,6 +11,7 @@
 #define DATA64_DESC_SELECTOR 0x30
 
 extern "C" void general_isr_tram();
+extern void* isr_stub_table[];
 
 static struct idt_entry idt_table[256];
 
@@ -40,16 +41,19 @@ void loadidt() {
 
 void init_idt() {
   for(int i = 0; i < 32; i++) {
-    init_idtentry(i, (uint64_t)general_isr_tram, 0, 0, 0xF);
+    init_idtentry(i, (uint64_t)isr_stub_table[i], 0, 0, 0xF);
   }
 
-  init_idtentry(0xE, (uint64_t)page_fault_handler, 0, 0, 0xF);
+  //init_idtentry(0xE, (uint64_t)page_fault_handler, 0, 0, 0xF);
+  //init_idtentry(0xD, (uint64_t)page_fault_handler, 0, 0, 0xF);
+  //init_idtentry(0x6, (uint64_t)page_fault_handler, 0, 0, 0xF);
+
 
   loadidt();
 }
 
-void general_isr() {
-  write_to_port(0xe9, (uint8_t)'r');
+void general_isr(uint8_t isr_vector) {
+  write_to_port(0xe9, (uint8_t)isr_vector);
   while(true);
 }
 

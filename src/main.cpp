@@ -62,8 +62,11 @@ void _start() {
   init_acpi((uint64_t)rsdp_request.response->address);
   MCFG* mcfg = get_mcfg();
   init_pci((uint64_t)mcfg);
-  init_heap(); 
+  init_heap();
+  // int i = 1/0;
+  // (void)i;
   // init_ahci();
+  //asm volatile("int3");
   limine_file* limine_f = module_request.response->modules[0];
   ramDisk* ramdisk = new ramDisk((uintptr_t)limine_f->address);
   init_fs(ramdisk);

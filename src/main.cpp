@@ -4,6 +4,7 @@
 #include "kheap.h"
 #include  "limine.h"
 #include "common.h"
+#include "mm/npaging.h"
 #include "vmcs/vmcs.h"
 #include "drivers/acpi.h"
 #include "drivers/pci.h"
@@ -63,19 +64,22 @@ void _start() {
   MCFG* mcfg = get_mcfg();
   init_pci((uint64_t)mcfg);
   init_heap();
+  asm volatile("mov $0xffff8000000b8000, %rax");
+  asm volatile("mov $0x0F61, (%rax)");
   // int i = 1/0;
   // (void)i;
   // init_ahci();
   //asm volatile("int3");
   limine_file* limine_f = module_request.response->modules[0];
+  save_host_pageMap();
   ramDisk* ramdisk = new ramDisk((uintptr_t)limine_f->address);
   init_fs(ramdisk);
   char file_buff[16];
   const char* file_name = "bios12.bin";
   uint32_t fd = vopenFile(file_name);
   uint64_t file_size = vgetFileSize(fd);
-  vseekp(fd, file_size - 16);
-  vreadFile(fd, file_buff, 16);
+  //vseekp(fd, file_size - 16);
+  //vreadFile(fd, file_buff, 16);
   //kpalloc();
   init_vm();
 

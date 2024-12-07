@@ -12,6 +12,10 @@
 #include <bit>
 #include <string>
 
+
+// @TODO: try to load seabios into the host's memory so I'll be able to see the instructions there.
+// Then, possibly I'll be able to figure out why it gets into an infinite loop
+
 #define QUANTOM 10
 #define INSTRUCTION_VMRUN_INTERCEPT (1 << 0)
 
@@ -202,18 +206,22 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
   uint64_t size_read = 0;
   for(int64_t i = num_of_pages; i > 0; i--) {
     uint64_t phys_page = kpalloc();
+    if(phys_page == 0) {
+      kpanic();
+    }
+
     mapPage(
         phys_page,
         bootloader_high_addr - i * PAGE_SIZE,
         GUEST_PHYSICAL_PAGE_FLAG,
-        vm_mem_map
+        0//vm_mem_map
     );
 
     mapPage(
         phys_page,
         isa_bootloader_high_addr - i * PAGE_SIZE, 
         GUEST_PHYSICAL_PAGE_FLAG,
-        vm_mem_map
+        0//vm_mem_map
     );
 
     uint32_t size_to_read = (file_size - size_read) > PAGE_SIZE ? PAGE_SIZE : (file_size - size_read);
@@ -227,13 +235,21 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
   }
 
   for(uint64_t i = 0; i < isa_bootloader_start_addr; i+=0x1000) {
+    if(i == 0xb8000) {
+      continue;
+    }
+
     uint64_t phys_page = kpalloc();
+    if(phys_page == 0) {
+      kpanic();
+    }
+
     kmemset((uint8_t*)TO_HIGHER_HALF(phys_page), 0x0, 0x1000);
     mapPage(
         phys_page,
         i,
         GUEST_PHYSICAL_PAGE_FLAG,
-        vm_mem_map
+        0//vm_mem_map
     );
   }
 
@@ -312,7 +328,7 @@ void init_host() {
 void init_vm() {
   enable_svm();
   init_host();
-  init_guest_state(1, "bios12.bin");
+  init_guest_state(1, "bios14.bin");
   context_switching(0, 1);
   while(true) {
     // context_switching(0, 1);

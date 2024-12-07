@@ -50,7 +50,7 @@ void create_linear_virtual_space(uint64_t size) {
 }
 
 void save_host_pageMap() {
-  asm volatile("movq %0, %%cr3" : "=r"(host_cr3));
+  asm volatile("movq %%cr3, %0" : "=r"(cr3_val));
 }
 
 uint64_t create_clean_virtual_space() {

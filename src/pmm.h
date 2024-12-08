@@ -5,6 +5,7 @@ struct page_frame_allocator {
   limine_memmap_response* entry;
   uint8_t* bitmap; 
   uint32_t bitmap_size;
+  uint32_t last_allocated_idx;
 };
 
 struct bitmap_entry {

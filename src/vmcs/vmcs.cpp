@@ -201,8 +201,8 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
   uint32_t num_of_pages = (file_size + PAGE_SIZE - 1) / PAGE_SIZE;
   uint64_t bootloader_high_addr = 0x100000000;
   uint64_t isa_bootloader_high_addr = 0x100000;
-  uint64_t isa_bootloader_start_addr = isa_bootloader_high_addr - num_of_pages * PAGE_SIZE;
-  
+  // uint64_t isa_bootloader_start_addr = isa_bootloader_high_addr - num_of_pages * PAGE_SIZE;
+  uint64_t isa_bootloader_start_addr = 0x1;
   uint64_t size_read = 0;
   for(int64_t i = num_of_pages; i > 0; i--) {
     uint64_t phys_page = kpalloc();
@@ -214,14 +214,14 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
         phys_page,
         bootloader_high_addr - i * PAGE_SIZE,
         GUEST_PHYSICAL_PAGE_FLAG,
-        0//vm_mem_map
+        vm_mem_map
     );
 
     mapPage(
         phys_page,
         isa_bootloader_high_addr - i * PAGE_SIZE, 
         GUEST_PHYSICAL_PAGE_FLAG,
-        0//vm_mem_map
+        vm_mem_map
     );
 
     uint32_t size_to_read = (file_size - size_read) > PAGE_SIZE ? PAGE_SIZE : (file_size - size_read);
@@ -249,7 +249,7 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
         phys_page,
         i,
         GUEST_PHYSICAL_PAGE_FLAG,
-        0//vm_mem_map
+        vm_mem_map
     );
   }
 

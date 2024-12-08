@@ -51,15 +51,30 @@ void init_pmm(struct limine_memmap_response* memmap_response) {
       }
     }
   }
+
+  page_frame_allocator_struct.last_allocated_idx = 0;
 }
 
 uint64_t kpalloc() {
-  for(uint32_t i = 0; i < page_frame_allocator_struct.bitmap_size; i++) {
+  uint32_t i = 0;
+  for(i = page_frame_allocator_struct.last_allocated_idx; i < page_frame_allocator_struct.bitmap_size; i++) {
     for(uint8_t j = 0; j < 8; j++) {
       if(getbit((uint64_t*)&page_frame_allocator_struct.bitmap[i], j) == 1) {
         clearbit((uint64_t*)&page_frame_allocator_struct.bitmap[i], j);
         number_of_avail_pages--;
-        return (uint64_t)((i*8+j)*0x1000);
+        page_frame_allocator_struct.last_allocated_idx = i;
+        return (uint64_t)(i*8+j)*0x1000;
+      }
+    }
+  }
+
+  for(i = 0; i < page_frame_allocator_struct.last_allocated_idx; i++) {
+    for(uint8_t j = 0; j < 8; j++) {
+      if(getbit((uint64_t*)&page_frame_allocator_struct.bitmap[i], j) == 1) {
+        clearbit((uint64_t*)&page_frame_allocator_struct.bitmap[i], j);
+        number_of_avail_pages--;
+        page_frame_allocator_struct.last_allocated_idx = i;
+        return (uint64_t)(i*8+j)*0x1000;
       }
     }
   }

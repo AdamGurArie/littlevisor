@@ -81,6 +81,8 @@ inline uint8_t getbit(uint64_t* val, uint8_t pos) {
   return (*val >> pos) & (uint64_t)1;
 }
 
+uint32_t kToLittleEndian(uint32_t value);
+
 inline uint64_t rdmsr(uint32_t msr) {
   uint32_t eax = 0;
   uint32_t edx = 0;

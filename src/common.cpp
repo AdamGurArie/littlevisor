@@ -61,6 +61,16 @@ int ktoupper(int c) {
   return c;
 }
 
+uint32_t kToLittleEndian(uint32_t value) {
+    uint64_t result = 0;
+    
+    for (int i = 0; i < 8; ++i) {
+        result |= ((value >> (i * 8)) & 0xFF) << ((7 - i) * 8);
+    }
+
+    return result;
+}
+
 //template<typename T>
 //uint8_t read_from_port_byte(uint16_t port) {
 //  uint8_t output = 0;

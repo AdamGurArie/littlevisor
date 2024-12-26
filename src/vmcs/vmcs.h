@@ -288,10 +288,10 @@ enum VMEXIT_EXITCODE
     VMEXIT_INVALID          =  -1
 };
 
-void vmrun(uint64_t vmcb_addr);
+void vmrun(uint64_t vmcb);
 void scheduale();
 void store_vmcb_guest();
-void vmrun(uint64_t vmcb_addr);
+// void vmrun(uint64_t vmcb_addr);
 void init_vm();
 void init_host();
 void vmexit_handler();

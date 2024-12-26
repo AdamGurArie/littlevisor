@@ -43,6 +43,9 @@ void init_idt() {
   for(int i = 0; i < 32; i++) {
     init_idtentry(i, (uint64_t)isr_stub_table[i], 0, 0, 0xF);
   }
+  // for(int i = 0; i < 32; i++) {
+  //   init_idtentry(i, (uint64_t)general_isr_tram, 0, 0, 0xF);
+  // }
 
   //init_idtentry(0xE, (uint64_t)page_fault_handler, 0, 0, 0xF);
   //init_idtentry(0xD, (uint64_t)page_fault_handler, 0, 0, 0xF);

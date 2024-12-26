@@ -9,6 +9,7 @@ struct pagingLevel {
 };
 
 void mapPage(uint64_t physical_addr, uint64_t virt_addr, uint16_t flags, uint64_t cr3);
+uint64_t walkTable(uint64_t virt_addr, uint64_t cr3);
 void switch_pageMap(uint64_t cr3);
 void save_host_pageMap();
 void create_linear_virtual_space(uint64_t size);

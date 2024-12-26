@@ -33,8 +33,9 @@
 #define INTERCEPT_EXCEPTION_PF (1 << 15)
 
 
-static uint32_t list_of_ports_to_intercept[] = {0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f5, 0x1f6, 0x1f7};
+static uint32_t list_of_ports_to_intercept[] = {0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f5, 0x1f6, 0x1f7, 0x514, 0x518};
 static uint64_t vmcb_addr = 0;
+static uint64_t host_state_area = 0;
 static context guests[10] = {};
 static uint64_t guests_count = 0;
 static uint32_t curr_guest_idx = 0;
@@ -81,10 +82,33 @@ void enable_svm() {
   return;
 }
 
-void vmrun(uint64_t vmcb_addr) {
-  asm volatile("mov %0, %%rax" :: "m"(vmcb_addr));
-  // asm volatile("vmsave");
+void vmsave(uint64_t host_state_area_addr) {
+  asm volatile("mov %0, %%rax" :: "m"(host_state_area_addr));
+  asm volatile("vmsave");
+}
+
+void vmload(uint64_t host_state_area_addr) {
+  asm volatile("mov %0, %%rax" :: "m"(host_state_area));
+  asm volatile("vmload");
+}
+
+void vmrun(uint64_t vmcb) {
+  asm volatile("push %rbp");
+  asm volatile("push %rbx");
+  asm volatile("push %r12");
+  asm volatile("push %r13");
+  asm volatile("push %r14");
+  asm volatile("push %r15");
+
+  asm volatile("mov %0, %%rax" :: "m"(vmcb));
   asm volatile("vmrun");
+
+  asm volatile("pop %r15");
+  asm volatile("pop %r14");
+  asm volatile("pop %r13");
+  asm volatile("pop %r12");
+  asm volatile("pop %rbx");
+  asm volatile("pop %rbp");
   // 1. handle vm-exit
   // 2. scheduale next vm
 }
@@ -201,8 +225,9 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
   uint32_t num_of_pages = (file_size + PAGE_SIZE - 1) / PAGE_SIZE;
   uint64_t bootloader_high_addr = 0x100000000;
   uint64_t isa_bootloader_high_addr = 0x100000;
+  uint64_t himem_size = 128 * 1024 * 1024; 
   // uint64_t isa_bootloader_start_addr = isa_bootloader_high_addr - num_of_pages * PAGE_SIZE;
-  uint64_t isa_bootloader_start_addr = 0x1;
+  uint64_t isa_bootloader_start_addr = isa_bootloader_high_addr - num_of_pages * PAGE_SIZE;
   uint64_t size_read = 0;
   for(int64_t i = num_of_pages; i > 0; i--) {
     uint64_t phys_page = kpalloc();
@@ -230,14 +255,15 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
         (char*)TO_HIGHER_HALF(phys_page),
         size_to_read
     );
+
     vseekr(file_handle, PAGE_SIZE);
     size_read += size_to_read;
   }
 
-  for(uint64_t i = 0; i < isa_bootloader_start_addr; i+=0x1000) {
-    if(i == 0xb8000) {
-      continue;
-    }
+  /*for(uint64_t i = 0; i < isa_bootloader_start_addr; i+=0x1000) {
+    // if(i == 0xb8000) {
+    //  continue;
+    // }
 
     uint64_t phys_page = kpalloc();
     if(phys_page == 0) {
@@ -251,20 +277,27 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
         GUEST_PHYSICAL_PAGE_FLAG,
         vm_mem_map
     );
-  }
+  }*/
 
   //uint64_t phys_page = kpalloc();
-  //mapPage(phys_page, 0xFFFF8000, 0x7, vm_mem_map);
+  //mapPage(phys_page, 0xFFFF8000, 0x7, vm_mem_map); 8
 
-  /*for(uint64_t i = 0; i < bootloader_base_addr; i += 0x1000) {
+  for(uint64_t i = 0; i < himem_size; i += 0x1000) {
     uint64_t phys_page = kpalloc();
     mapPage(
         phys_page,
-        i,
+        isa_bootloader_high_addr + i,
         GUEST_PHYSICAL_PAGE_FLAG, 
         vm_mem_map
     );
-  }*/
+  }
+  
+  uint64_t page = kpalloc();
+  if(page == 0) {
+    kpanic();
+  }
+
+  // mapPage(page, 0xa83e0100, 0xF, vm_mem_map);
 }
 
 void init_host() {
@@ -277,13 +310,14 @@ void init_host() {
   vmcb* vmcb_struct = (vmcb*)TO_HIGHER_HALF(vmcb_addr);
   kmemset((uint8_t*)TO_HIGHER_HALF(vmcb_addr), 0x0, sizeof(vmcb));
 
-  uint64_t host_state_area = kpalloc();
+  host_state_area = kpalloc();
   if(host_state_area == 0) {
     kpanic();
   }
 
   kmemset((uint8_t*)TO_HIGHER_HALF(host_state_area), 0x0, 0x1000);
   wrmsr(0xC0010117, host_state_area);
+  host_state_area = rdmsr(0xC0010117);
 
   // init ioio map
   ioio_map_addr = kpalloc_contignious(3);
@@ -328,12 +362,14 @@ void init_host() {
 void init_vm() {
   enable_svm();
   init_host();
-  init_guest_state(1, "bios14.bin");
+  init_guest_state(1, "coreboot.rom");
   context_switching(0, 1);
   while(true) {
     // context_switching(0, 1);
     vmexit_handler();
+    vmsave(host_state_area);
     vmrun(vmcb_addr);
+    // vmload(host_state_area);
   }
 }
 
@@ -370,6 +406,30 @@ void handle_ioio_vmexit() {
       //uint64_t output = guests[curr_guest_idx].ide.handle_transaction(transaction);
       guests[curr_guest_idx].ata_device->dispatch_command(transaction);
   }
+
+  if(exitinfo1->port == 0x518) {
+    if(exitinfo1->type == 0) {
+      uint32_t addr = kToLittleEndian((uint32_t)vmcb_struct->state_save_area.rax);
+      uint64_t phys_addr = walkTable(addr, vmcb_struct->control.n_cr3);
+      if(phys_addr == 0) {
+        kpanic();
+      }
+
+      uint32_t low_phys_addr = (uint32_t)(phys_addr & 0xFFFFFFFF);
+      uint32_t high_phys_addr = (uint32_t)((phys_addr >> 32) & 0xFFFFFFFF);
+      // asm volatile("outl %0,%1" : : "a"(0), "Nd"(0x514));
+      if(high_phys_addr) {
+        asm volatile("outl %0,%1" : : "a"(kToLittleEndian(high_phys_addr)), "Nd"(0x514));
+      }
+
+      asm volatile("outl %0,%1" : : "a"(kToLittleEndian(low_phys_addr)), "Nd"(0x518));
+      //kmemset((uint8_t*)TO_HIGHER_HALF(low_phys_addr), 0x0, 8);
+      //asm volatile("outl %0,%1" : : "a"(0), "Nd"(0x514));
+      // get physical address and write that instead of the given nested virtual address for the dma to actually work   
+    }
+  }
+
+  vmcb_struct->state_save_area.rip = vmcb_struct->control.exitinfo2;
 }
 
 void inject_event(uint8_t vector, event_type_e type, uint8_t push_error_code, uint32_t error_code) {

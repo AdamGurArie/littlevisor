@@ -3,6 +3,7 @@
 //#include "../vm_drivers/ide.h"
 #include "../vm_drivers/ata_pio.h"
 #include <cstdint>
+#include <sys/cdefs.h>
 
 #define VMCB_STATESAVE_AREA_OFFSET 0x3FF
 #define MEMORY_SPACE_PER_VM 20000000
@@ -35,6 +36,27 @@ struct event_injection_field {
   uint32_t reserved : 19;
   uint8_t valid : 1;
   uint32_t errorcode;
+} __attribute__((packed));
+
+struct guest_regs {
+  uint64_t rbx;
+  uint64_t rcx;
+  uint64_t rdx;
+  uint64_t rsi;
+  uint64_t rdi;
+  uint64_t rbp;
+  uint64_t r8;
+  uint64_t r9;
+  uint64_t r10;
+  uint64_t r11;
+  uint64_t r12;
+  uint64_t r13;
+  uint64_t r14;
+  uint64_t r15;
+  uint64_t dr0;
+  uint64_t dr1;
+  uint64_t dr2;
+  uint64_t dr3;
 } __attribute__((packed));
 
 struct vmcb_control {
@@ -135,6 +157,7 @@ struct vmcb {
 
 struct context {
   vmcb_state_save_area guest;
+  guest_regs regs;
   uint64_t guest_cr3;
   uint32_t guest_asid;
   ata_pio_device* ata_device;
@@ -286,6 +309,12 @@ enum VMEXIT_EXITCODE
     VMEXIT_MWAIT_CONDITIONAL= 140,
     VMEXIT_NPF              = 1024, /* nested paging fault */
     VMEXIT_INVALID          =  -1
+};
+
+struct FwCfgDmaAccess {
+  uint32_t control;
+  uint32_t length;
+  uint64_t address;
 };
 
 void vmrun(uint64_t vmcb);

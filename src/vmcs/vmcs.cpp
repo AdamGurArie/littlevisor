@@ -32,8 +32,9 @@
 #define INTERCEPT_EXCEPTION_BP (1 << 4)
 #define INTERCEPT_EXCEPTION_PF (1 << 15)
 
+extern "C" void svm_vmrun(guest_regs* regs, uint64_t vmcb);
 
-static uint32_t list_of_ports_to_intercept[] = {0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f5, 0x1f6, 0x1f7, 0x514, 0x518};
+static uint32_t list_of_ports_to_intercept[] = {0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f5, 0x1f6, 0x1f7, 0x514, 0x518, 0x511, 0x510};
 static uint64_t vmcb_addr = 0;
 static uint64_t host_state_area = 0;
 static context guests[10] = {};
@@ -99,6 +100,7 @@ void vmrun(uint64_t vmcb) {
   asm volatile("push %r13");
   asm volatile("push %r14");
   asm volatile("push %r15");
+  asm volatile("push %rsi");
 
   asm volatile("mov %0, %%rax" :: "m"(vmcb));
   asm volatile("vmrun");
@@ -147,7 +149,8 @@ void context_switching(uint16_t curr_guest, uint16_t next_guest) {
   vmcb_struct->control.guest_asid = guests[next_guest].guest_asid;
   
   curr_guest_idx = next_guest;
-  vmrun(vmcb_addr);
+  // vmrun(vmcb_addr);
+  svm_vmrun(&guests[curr_guest_idx].regs, vmcb_addr);
 }
 
 void init_guest_state(uint16_t guest_idx, const char* codefile) {
@@ -368,7 +371,7 @@ void init_vm() {
     // context_switching(0, 1);
     vmexit_handler();
     vmsave(host_state_area);
-    vmrun(vmcb_addr);
+    svm_vmrun(&guests[curr_guest_idx].regs, vmcb_addr);
     // vmload(host_state_area);
   }
 }
@@ -389,6 +392,7 @@ void handle_ioio_vmexit() {
   // return it to the destination register/address(if needed)
   // @TODO: add handling to REP prefix
   vmcb* vmcb_struct = (vmcb*)(TO_HIGHER_HALF(vmcb_addr));
+  guest_regs* curr_guest_regs = &guests[curr_guest_idx].regs;
   uint64_t exitinfo1_val = vmcb_struct->control.exitinfo1;
   ioio_exitinfo1* exitinfo1 = std::bit_cast<ioio_exitinfo1*>(&exitinfo1_val);
 
@@ -407,13 +411,18 @@ void handle_ioio_vmexit() {
       guests[curr_guest_idx].ata_device->dispatch_command(transaction);
   }
 
-  if(exitinfo1->port == 0x518) {
+  if(exitinfo1->port == 0x518 || exitinfo1->port == 0x514) {
     if(exitinfo1->type == 0) {
       uint32_t addr = kToLittleEndian((uint32_t)vmcb_struct->state_save_area.rax);
       uint64_t phys_addr = walkTable(addr, vmcb_struct->control.n_cr3);
       if(phys_addr == 0) {
         kpanic();
       }
+      
+      FwCfgDmaAccess* dma_access = std::bit_cast<FwCfgDmaAccess*>(TO_HIGHER_HALF(phys_addr));
+      uint64_t dma_addr = kToLittleEndian(dma_access->address);
+      uint64_t dma_phys_addr = walkTable(dma_addr, vmcb_struct->control.n_cr3);
+      dma_access->address = kToLittleEndian(dma_phys_addr);
 
       uint32_t low_phys_addr = (uint32_t)(phys_addr & 0xFFFFFFFF);
       uint32_t high_phys_addr = (uint32_t)((phys_addr >> 32) & 0xFFFFFFFF);
@@ -427,6 +436,40 @@ void handle_ioio_vmexit() {
       //asm volatile("outl %0,%1" : : "a"(0), "Nd"(0x514));
       // get physical address and write that instead of the given nested virtual address for the dma to actually work   
     }
+
+  } else {
+    // uint64_t inst_phys_addr = walkTable(vmcb_struct->state_save_area.rip, vmcb_struct->control.n_cr3);
+
+      if(exitinfo1->type == 0) {
+        asm volatile("outl %0,%1" : : "a"((uint32_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+      } else {
+        // handle REP read
+        
+        uint64_t value = 0;
+        size_t iterations = exitinfo1->rep ? curr_guest_regs->rcx : 1;
+
+        for(size_t i = 0; i < iterations; i++) {
+          if(exitinfo1->sz8) {
+            uint32_t read_val = 0;
+            asm volatile("inl %1,%0" : "=a"(read_val) : "Nd"(exitinfo1->port+3));
+            value |= (read_val << (8 * i));
+          } else if(exitinfo1->sz16) {
+            uint16_t read_val = 0;
+            asm volatile("inw %1,%0" : "=a"(read_val) : "Nd"(exitinfo1->port));
+            value |= (read_val << (16 * i));
+          } else if(exitinfo1->sz32) {
+            uint32_t read_val = 0;
+            asm volatile("inl %1,%0" : "=a"(read_val) : "Nd"(exitinfo1->port));
+            value |= (read_val << (32 * i));
+          }
+        }
+
+        vmcb_struct->state_save_area.rax = value;
+
+        if(exitinfo1->rep == 1) {
+          curr_guest_regs->rcx = 0;
+        }
+      }
   }
 
   vmcb_struct->state_save_area.rip = vmcb_struct->control.exitinfo2;

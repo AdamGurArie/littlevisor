@@ -34,7 +34,10 @@
 
 extern "C" void svm_vmrun(guest_regs* regs, uint64_t vmcb);
 
-static uint32_t list_of_ports_to_intercept[] = {0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f5, 0x1f6, 0x1f7, 0x514, 0x518, 0x511, 0x510};
+static uint64_t calculate_physical_addr(uint16_t seg, uint16_t off);
+static uint64_t calculate_physical_addr(uint32_t seg, uint32_t off);
+
+static uint32_t list_of_ports_to_intercept[] = {0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f5, 0x1f6, 0x1f7, 0x514, 0x518, 0x510, 0x511};
 static uint64_t vmcb_addr = 0;
 static uint64_t host_state_area = 0;
 static context guests[10] = {};
@@ -49,6 +52,16 @@ static uint64_t msrpm_base_addr = 0;
   uint64_t leaf = 0x8000000A;
   uint64_t sub_leaf = 0;
 } */
+
+static uint64_t calculate_physical_addr(uint16_t seg, uint16_t off) {
+  uint64_t effective_addr = (seg * 0x10) + off;
+  return walkTable(effective_addr, guests[curr_guest_idx].guest_cr3);
+}
+
+static uint64_t calculate_physical_addr(uint32_t seg, uint32_t off) {
+  uint64_t effective_addr = seg + off;
+  return walkTable(effective_addr, guests[curr_guest_idx].guest_cr3);
+}
 
 void enable_svm() {
   // check if svm is supported
@@ -441,7 +454,30 @@ void handle_ioio_vmexit() {
     // uint64_t inst_phys_addr = walkTable(vmcb_struct->state_save_area.rip, vmcb_struct->control.n_cr3);
 
       if(exitinfo1->type == 0) {
-        asm volatile("outl %0,%1" : : "a"((uint32_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+        // @TODO: add support for REP
+        if(exitinfo1->sz8) {
+          if(exitinfo1->str) {
+            //asm volatile("outsb %0,%1" :: "a"((uint8_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+          } else {
+            asm volatile("outb %0,%1" :: "a"((uint8_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+          }
+
+        } else if(exitinfo1->sz16) {
+          if(exitinfo1->str) {
+            //asm volatile("outsw %0,%1" :: "a"((uint16_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+          } else {
+            asm volatile("outw %0,%1" :: "a"((uint16_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+          }
+
+        } else if(exitinfo1->sz32) {
+          if(exitinfo1->str) {
+            //asm volatile("outsl %0,%1" :: "a"((uint32_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+          } else {
+            asm volatile("outl %0,%1" :: "a"((uint32_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+          }
+
+        }
+
       } else {
         // handle REP read
         
@@ -450,21 +486,63 @@ void handle_ioio_vmexit() {
 
         for(size_t i = 0; i < iterations; i++) {
           if(exitinfo1->sz8) {
-            uint32_t read_val = 0;
-            asm volatile("inl %1,%0" : "=a"(read_val) : "Nd"(exitinfo1->port+3));
-            value |= (read_val << (8 * i));
+            uint8_t read_val = 0;
+            
+            if(exitinfo1->str) {
+              asm volatile("mov %0, %%rdx" :: "a"((uint64_t)exitinfo1->port) : "%rdx");
+              asm volatile("mov %0, %%rdi" :: "a"((uint64_t)&read_val) : "%rdi");
+              asm volatile("insb");
+              uint64_t target_addr = TO_HIGHER_HALF(calculate_physical_addr(
+                (uint32_t)vmcb_struct->state_save_area.es.base,
+                (uint32_t)curr_guest_regs->rdi
+              )); 
+              //uint64_t target_addr = TO_HIGHER_HALF(vmcb_struct->state_save_area.rax);
+
+              kmemcpy((uint8_t*)(target_addr + i), (uint8_t*)&read_val, sizeof(read_val));
+
+            } else {
+              asm volatile("inb %1,%0" : "=a"(read_val) : "Nd"(exitinfo1->port));
+              value |= (read_val << (8*i));
+            }
+
           } else if(exitinfo1->sz16) {
             uint16_t read_val = 0;
-            asm volatile("inw %1,%0" : "=a"(read_val) : "Nd"(exitinfo1->port));
-            value |= (read_val << (16 * i));
+
+            if(exitinfo1->str) {
+              asm volatile("mov %0, %%rdx" :: "a"((uint64_t)exitinfo1->port) : "%rdx");
+              asm volatile("mov %0, %%rdi" :: "a"((uint64_t)&read_val) : "%rdi");
+              asm volatile("insw");
+              uint64_t target_addr = TO_HIGHER_HALF(calculate_physical_addr(
+                  (uint32_t)vmcb_struct->state_save_area.es.base,
+                  (uint32_t)curr_guest_regs->rdi
+              ));
+              //uint64_t target_addr = TO_HIGHER_HALF(vmcb_struct->state_save_area.rax);
+
+              kmemcpy((uint8_t*)&read_val, (uint8_t*)(target_addr + i), sizeof(read_val));
+            } else {
+              asm volatile("inw %1,%0" : "=a"(read_val) : "Nd"(exitinfo1->port));
+              value |= (read_val << (16*i));
+            }
+
           } else if(exitinfo1->sz32) {
             uint32_t read_val = 0;
-            asm volatile("inl %1,%0" : "=a"(read_val) : "Nd"(exitinfo1->port));
-            value |= (read_val << (32 * i));
+
+            if(exitinfo1->str) {
+              asm volatile("mov %0, %%rdx" :: "a"((uint64_t)exitinfo1->port) : "%rdx");
+              asm volatile("mov %0, %%rdi" :: "a"((uint64_t)&read_val) : "%rdi");
+              asm volatile("insl");
+              uint64_t target_addr = TO_HIGHER_HALF(walkTable(curr_guest_regs->rdi, guests[curr_guest_idx].guest_cr3));
+              kmemcpy((uint8_t*)(target_addr + i), (uint8_t*)&read_val, sizeof(read_val));
+            } else {
+              asm volatile("inl %1,%0" : "=a"(read_val) : "Nd"(exitinfo1->port));
+              value |= (read_val << (32*i));
+            }
           }
         }
-
-        vmcb_struct->state_save_area.rax = value;
+        
+        if(!exitinfo1->str) {
+          vmcb_struct->state_save_area.rax = value;
+        }
 
         if(exitinfo1->rep == 1) {
           curr_guest_regs->rcx = 0;

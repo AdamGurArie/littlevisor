@@ -74,12 +74,12 @@ void _start() {
   save_host_pageMap();
   ramDisk* ramdisk = new ramDisk((uintptr_t)limine_f->address);
   init_fs(ramdisk);
-  // char file_buff[16];
-  // const char* file_name = "bios12.bin";
-  // uint32_t fd = vopenFile(file_name);
-  // uint64_t file_size = vgetFileSize(fd);
-  //vseekp(fd, file_size - 16);
-  //vreadFile(fd, file_buff, 16);
+  char file_buff[16];
+  const char* file_name = "testrom.rom";
+  uint32_t fd = vopenFile(file_name);
+  uint64_t file_size = vgetFileSize(fd);
+  vseekp(fd, file_size - 16);
+  vreadFile(fd, file_buff, 16);
   //kpalloc();
   init_vm();
 

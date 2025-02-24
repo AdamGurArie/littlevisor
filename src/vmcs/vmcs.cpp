@@ -11,6 +11,7 @@
 #include <math.h>
 #include <bit>
 #include <string>
+#include <algorithm>
 
 
 // @TODO: try to load seabios into the host's memory so I'll be able to see the instructions there.
@@ -37,7 +38,9 @@ extern "C" void svm_vmrun(guest_regs* regs, uint64_t vmcb);
 static uint64_t calculate_physical_addr(uint16_t seg, uint16_t off);
 static uint64_t calculate_physical_addr(uint32_t seg, uint32_t off);
 
-static uint32_t list_of_ports_to_intercept[] = {0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f5, 0x1f6, 0x1f7, 0x514, 0x518, 0x510, 0x511};
+//static uint32_t list_of_ports_to_intercept[] = {0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f5, 0x1f6, 0x1f7, 0x170, 0x171, 0x172, 0x173, 0x174, 0x175, 0x176, 0x177, 0x3f6, 0x3f7, 0x514, 0x518, 0x510, 0x511};
+static uint32_t list_of_ports_to_intercept[] = {0x514, 0x518, 0x510, 0x511, 0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f6, 0x1f7, 0x60608, 0x4240, 0x4241, 0x4242, 0x4243, 0x608};
+//static uint32_t list_of_ports_to_intercept[] = {0x514, 0x518, 0x510, 0x511, 0x1f3};
 static uint64_t vmcb_addr = 0;
 static uint64_t host_state_area = 0;
 static context guests[10] = {};
@@ -46,6 +49,7 @@ static uint32_t curr_guest_idx = 0;
 static uint32_t quantom_counter = 0;
 static uint64_t ioio_map_addr = 0;
 static uint64_t msrpm_base_addr = 0;
+static bool test = false;
 
 /* uint8_t detect_np_support() {
   uint64_t output = 0;
@@ -241,10 +245,12 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
   uint32_t num_of_pages = (file_size + PAGE_SIZE - 1) / PAGE_SIZE;
   uint64_t bootloader_high_addr = 0x100000000;
   uint64_t isa_bootloader_high_addr = 0x100000;
+  uint64_t isa_bootloader_start = kmin(128*1024, file_size);
   uint64_t himem_size = 128 * 1024 * 1024; 
   // uint64_t isa_bootloader_start_addr = isa_bootloader_high_addr - num_of_pages * PAGE_SIZE;
   uint64_t isa_bootloader_start_addr = isa_bootloader_high_addr - num_of_pages * PAGE_SIZE;
   uint64_t size_read = 0;
+  uint64_t isa_curr = isa_bootloader_start;
   for(int64_t i = num_of_pages; i > 0; i--) {
     uint64_t phys_page = kpalloc();
     if(phys_page == 0) {
@@ -259,13 +265,15 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
     );
     
 
-    /*if(i * PAGE_SIZE < isa_bootloader_high_addr) {
+    /*if((file_size - i * PAGE_SIZE) <= isa_bootloader_start) {
       mapPage(
           phys_page,
-          isa_bootloader_high_addr - i * PAGE_SIZE, 
+          isa_bootloader_start + isa_curr, 
           GUEST_PHYSICAL_PAGE_FLAG,
           vm_mem_map
       );
+
+      isa_curr -= PAGE_SIZE;
     }*/
 
     uint32_t size_to_read = (file_size - size_read) > PAGE_SIZE ? PAGE_SIZE : (file_size - size_read);
@@ -320,6 +328,11 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
     );
   }
   
+  //TODO: create a real IOAPIC driver
+  mapPage(0xfec00000, 0xfec00000, GUEST_PHYSICAL_PAGE_FLAG, vm_mem_map); // map IOAPIC
+  // mapPage(0xb8000, 0xb8000, GUEST_PHYSICAL_PAGE_FLAG, vm_mem_map);
+  // walkTable(0xfec00000, vm_mem_map);
+  
   //uint64_t page = kpalloc();
   //if(page == 0) {
   //  kpanic();
@@ -327,6 +340,8 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
 
   // mapPage(page, 0xa83e0100, 0xF, vm_mem_map);
 }
+
+// check if all the registers are restored after vmexit, if not it might be the cause for the weird thing with the pio
 
 void init_host() {
   // allocate memory for the vmcb
@@ -358,7 +373,9 @@ void init_host() {
     uint8_t bit = i % 8;
     uint8_t* ioio_map_ptr = (uint8_t*)TO_HIGHER_HALF(ioio_map_addr);
     setbit(&ioio_map_ptr[byte], bit);
-  } 
+  }
+
+  uint8_t* ioio_map_ptr = (uint8_t*)TO_HIGHER_HALF(ioio_map_addr);
   // kmemset((uint8_t*)TO_HIGHER_HALF(ioio_map_addr), 0xFF, 0x1000*3);
   vmcb_struct->control.intercepts_insts_1 = (1 << 27);
 
@@ -371,14 +388,14 @@ void init_host() {
   }
 
   kmemset((uint8_t*)TO_HIGHER_HALF(msrpm_base_addr), 0x0, 0x1000); 
-  vmcb_struct->control.intercept_exceptions = 0xFFFFFFFF;
+  //vmcb_struct->control.intercept_exceptions = 0xFFFFFFFF;
   vmcb_struct->control.np_enable = 1;
 
   vmcb_struct->control.iopm_base_pa = ioio_map_addr;
   vmcb_struct->control.msrpm_base_pa = msrpm_base_addr;
   vmcb_struct->control.intercept_cr_reads = 0;
   vmcb_struct->control.intercepts_cr_writes = 0;
-  // vmcb_struct->control.intercept_exceptions = INTERCEPT_EXCEPTION_NMI | INTERCEPT_EXCEPTION_PF;
+  vmcb_struct->control.intercept_exceptions = 0xFFFFFFFF;
 
   // create ide virtual driver
   // virtual_storage_device* storage_dev = new virtual_storage_device((char*)"ide_disk", 512);
@@ -407,6 +424,10 @@ void vmexit_handler() {
     case VMEXIT_IOIO : {
       handle_ioio_vmexit(); 
     }
+
+    default: {
+      break;
+    }
   }
 }
 
@@ -420,13 +441,21 @@ void handle_ioio_vmexit() {
   guest_regs* curr_guest_regs = &guests[curr_guest_idx].regs;
   uint64_t exitinfo1_val = vmcb_struct->control.exitinfo1;
   ioio_exitinfo1* exitinfo1 = std::bit_cast<ioio_exitinfo1*>(&exitinfo1_val);
-
+  /* if(exitinfo1->port == 0x402) {
+    int a = 10;
+    (void)a;
+  } */
   if(((exitinfo1->port >= IO_MASTER_BASE_PORT) && (exitinfo1->port <= (IO_MASTER_BASE_PORT + 7)))      ||
     ((exitinfo1->port >= IO_MASTER_BASE_CONTROL) && (exitinfo1->port <= (IO_MASTER_BASE_CONTROL + 1))) ||
     ((exitinfo1->port >= IO_SLAVE_BASE_PORT) && (exitinfo1->port <= (IO_SLAVE_BASE_PORT + 7)))         ||
-    ((exitinfo1->port >= IO_SLAVE_CONTROL) && (exitinfo1->port <= (IO_SLAVE_CONTROL + 1)))) {
+    ((exitinfo1->port >= IO_SLAVE_CONTROL) && (exitinfo1->port <= (IO_SLAVE_CONTROL + 1)))  || (exitinfo1->port == 0x4242) || (exitinfo1->port == 0x4243)) {
+    if(!test) {
+      test = true;
+      //kmemset((uint8_t*)TO_HIGHER_HALF(vmcb_struct->control.iopm_base_pa), 0xFF, 0x1000*3);
+    }
       //uint32_t port = exitinfo1->port;
       //operands_decoding inst_decode = decode_in(vmcb_struct->state_save_area.rip);
+
       ide_transaction transaction{.exitinfo = *exitinfo1, .written_val = 0};
       if(exitinfo1->type == 0) {
         transaction.written_val = vmcb_struct->state_save_area.rax;
@@ -434,10 +463,9 @@ void handle_ioio_vmexit() {
 
       //uint64_t output = guests[curr_guest_idx].ide.handle_transaction(transaction);
       guests[curr_guest_idx].ata_device->dispatch_command(transaction);
-  }
-
-  if(exitinfo1->port == 0x518 || exitinfo1->port == 0x514) {
+  } else if(exitinfo1->port == 0x518 || exitinfo1->port == 0x514) {
     if(exitinfo1->type == 0) {
+
       uint32_t addr = kToLittleEndian((uint32_t)vmcb_struct->state_save_area.rax);
       uint64_t phys_addr = walkTable(addr, vmcb_struct->control.n_cr3);
       if(phys_addr == 0) {
@@ -470,23 +498,35 @@ void handle_ioio_vmexit() {
         // @TODO: add support for REP
         if(exitinfo1->sz8) {
           if(exitinfo1->str) {
-            //asm volatile("outsb %0,%1" :: "a"((uint8_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+            // uint64_t ds = 0;
+            // uint64_t rsi = 0;
+            // asm volatile("mov %%ds, %0" : "a"(ds));
+            //asm volatile("mov %0, %%ds" :: "a"(vmcb_struct->state_save_area.ds.selector));
+            asm volatile("mov %0, %%rsi" :: "a"(curr_guest_regs->rsi));
+            asm volatile("mov %0, %%rdx" :: "a"((uint64_t)exitinfo1->port));
+            asm volatile("outsb");
           } else {
-            asm volatile("outb %0,%1" :: "a"((uint8_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+            asm volatile("outb %0,%1" :: "a"((uint8_t)(vmcb_struct->state_save_area.rax & 0xFF)), "Nd"(exitinfo1->port));
           }
 
         } else if(exitinfo1->sz16) {
           if(exitinfo1->str) {
-            //asm volatile("outsw %0,%1" :: "a"((uint16_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+            //asm volatile("mov %0, %%ds" :: "a"(vmcb_struct->state_save_area.ds.selector));
+            asm volatile("mov %0, %%rsi" :: "a"(curr_guest_regs->rsi));
+            asm volatile("mov %0, %%rdx" :: "a"((uint64_t)exitinfo1->port));
+            asm volatile("outsw");
           } else {
-            asm volatile("outw %0,%1" :: "a"((uint16_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+            asm volatile("outw %0,%1" :: "a"((uint16_t)(vmcb_struct->state_save_area.rax & 0xFFFF)), "Nd"(exitinfo1->port));
           }
 
         } else if(exitinfo1->sz32) {
           if(exitinfo1->str) {
-            //asm volatile("outsl %0,%1" :: "a"((uint32_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+            //asm volatile("mov %0, %%ds" :: "a"(vmcb_struct->state_save_area.ds.selector));
+            asm volatile("mov %0, %%rsi" :: "a"(curr_guest_regs->rsi));
+            asm volatile("mov %0, %%rdx" :: "a"((uint64_t)exitinfo1->port));
+            asm volatile("outsl");
           } else {
-            asm volatile("outl %0,%1" :: "a"((uint32_t)vmcb_struct->state_save_area.rax), "Nd"(exitinfo1->port));
+            asm volatile("outl %0,%1" :: "a"((uint32_t)(vmcb_struct->state_save_area.rax & 0xFFFFFFFF)), "Nd"(exitinfo1->port));
           }
 
         }
@@ -589,3 +629,5 @@ void edit_vmcb_state(vmcb_registers reg, uint64_t value) {
       break;
   }
 }
+
+// for some reason, after fixing the stack frame, it will use port 0x608 instead of 0xe408 for the pm_timer, it seems like it cause the problem because seabios tries to read from it in an infinite loop and it doesn't get any feedback, so it just stays inside this loop

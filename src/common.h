@@ -101,6 +101,14 @@ inline void cpuid(uint32_t leaf, uint32_t& a, uint32_t& b, uint32_t& c, uint32_t
   asm volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "c"(leaf));
 };
 
+inline uint64_t kmin(uint64_t a, uint64_t b) {
+  if(a < b) {
+    return a;
+  } else {
+    return b;
+  }
+}
+
 void* operator new(std::size_t size);
 void operator delete(void* p) noexcept;
 void operator delete(void* p, uint64_t param) noexcept;

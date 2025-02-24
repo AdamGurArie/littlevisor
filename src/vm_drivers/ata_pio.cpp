@@ -13,11 +13,8 @@ uint16_t ata_pio_device::handle_read_register(ata_pio_base_ports port) {
     case DATA_REGISTER:
       return this->registers.data_reg;
 
-    case ERROR_REGISTER:
+    case ERROR_FEATURES_REGISTER:
       return this->registers.error_reg;
-
-    case FEATURES_REGISTER:
-      return this->registers.features_reg;
 
     case SECTOR_COUNT_REGISTER:
       return this->registers.sec_count_reg;
@@ -34,11 +31,11 @@ uint16_t ata_pio_device::handle_read_register(ata_pio_base_ports port) {
     case DRIVE_HEAD_REGISTER:
       return this->registers.drive_head_reg;
 
-    case STATUS_REGISTER:
+    case STATUS_COMMAND_REGISTER:
       return this->registers.status_reg;
 
-    case COMMAND_REGISTER:
-      return this->registers.cmd_reg;
+    default:
+      return 0;
   }
 
   return 0;
@@ -50,11 +47,7 @@ void ata_pio_device::handle_write_register(ata_pio_base_ports port, uint16_t dat
       this->registers.data_reg = data;
       return;
 
-    case ERROR_REGISTER:
-      this->registers.error_reg = data;
-      return;
-
-    case FEATURES_REGISTER:
+    case ERROR_FEATURES_REGISTER:
       this->registers.features_reg = data;
       return;
 
@@ -78,12 +71,11 @@ void ata_pio_device::handle_write_register(ata_pio_base_ports port, uint16_t dat
       this->registers.drive_head_reg = data;
       return;
 
-    case STATUS_REGISTER:
-      this->registers.status_reg = data;
+    case STATUS_COMMAND_REGISTER:
+      this->registers.cmd_reg = data;
       return;
 
-    case COMMAND_REGISTER:
-      this->registers.cmd_reg = data;
+    default:
       return;
   }
 }
@@ -109,13 +101,20 @@ void ata_pio_device::dispatch_command(ide_transaction transaction) {
       }
   }
 
-  // handle commands
+  // handle commands and status
   if((transaction.exitinfo.port == 0x1F7) || (transaction.exitinfo.port == 0x177)) {
-    this->registers.cmd_reg = transaction.written_val;
-    this->handle_command(transaction.written_val); 
-  }
-  
-  // handle data register IO
+    if(transaction.exitinfo.type == 1) {
+      uint64_t ret_val = this->handle_read_register(STATUS_COMMAND_REGISTER);
+      edit_vmcb_state(RAX, ret_val);
+
+    } else {
+      this->registers.cmd_reg = transaction.written_val;
+      this->handle_command(transaction.written_val);
+
+    }
+
+  } 
+
   if((transaction.exitinfo.port == 0x1F0) || (transaction.exitinfo.port == 0x170)) {
     // write/read from data register, handle data IO
     if(transaction.exitinfo.type == 1) {

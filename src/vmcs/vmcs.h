@@ -2,6 +2,7 @@
 
 //#include "../vm_drivers/ide.h"
 #include "../vm_drivers/ata_pio.h"
+#include "../vm_drivers/cmos.h"
 #include <cstdint>
 #include <sys/cdefs.h>
 
@@ -161,6 +162,7 @@ struct context {
   uint64_t guest_cr3;
   uint32_t guest_asid;
   ata_pio_device* ata_device;
+  cmos_device* cmos_dev;
 };
 
 enum VMEXIT_EXITCODE

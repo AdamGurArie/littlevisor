@@ -10,6 +10,11 @@
 #define IO_SLAVE_BASE_PORT     0x170
 #define IO_SLAVE_CONTROL       0x376
 
+struct ata_response {
+  uint8_t* buffer;
+  uint32_t size;
+};
+
 struct ata_pio_registers_s {
   uint16_t data_reg;
   uint16_t error_reg;
@@ -20,6 +25,9 @@ struct ata_pio_registers_s {
   uint8_t drive_head_reg;
   uint8_t status_reg;
   uint8_t cmd_reg;
+  uint8_t alt_status_reg;
+  uint8_t dev_ctrl_reg;
+  uint8_t drive_addr_reg;
 };
 
 enum transfer_type_e {
@@ -37,6 +45,30 @@ enum ata_pio_base_ports {
   CYLINDER_HIGH_REGISTER_LBAHIGH,
   DRIVE_HEAD_REGISTER,
   STATUS_COMMAND_REGISTER,
+  ALT_STATUS_REG_DEV_CTRL = 0x3F6,
+  DRIVE_ADDR_REG
+};
+
+enum DEV_CTRL_DEV_BITS {
+  DEV_CTRL_NA1,
+  DEV_CTRL_NIEN,
+  DEV_CTRL_SRST,
+  DEV_CTRL_NA2,
+  DEV_CTRL_NA3,
+  DEV_CTRL_NA4,
+  DEV_CTRL_NA5,
+  DEV_CTRL_HOB
+};
+
+enum STATUS_REG_BITS {
+  STATUS_REG_ERR,
+  STATUS_REG_IDX,
+  STATUS_REG_CORR,
+  STATUS_REG_DRQ,
+  STATUS_REG_SRV,
+  STATUS_REG_DF,
+  STATUS_REG_RDY,
+  STATUS_REG_BSY
 };
 
 /*enum ata_pio_read_ports {
@@ -86,15 +118,17 @@ class ata_pio_device {
     void handle_write_register(ata_pio_base_ports port, uint16_t data);
     void handle_read_sectors();
     void handle_write_sectors();
-    void handle_read_data(ide_transaction transaction);
+    void handle_read_data(ide_transaction transaction, ata_response* response);
     void handle_write_data(ide_transaction transaction);
     void handle_command(uint16_t command);
     void handle_identify_command();
+    void handle_device_ctrl_reg_write();
+    void handle_device_reset();
  
 
   public:
     ata_pio_device(storage_device* virt_storage_device) : storage_dev(virt_storage_device) {};
-    void dispatch_command(ide_transaction transaction);
+    void dispatch_command(ide_transaction transaction, ata_response* response);
 };
 
 class virtual_storage_device : public storage_device {

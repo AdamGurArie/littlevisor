@@ -20,7 +20,7 @@ MCFG* get_mcfg() {
     uint32_t num_of_entries = (rsdt->length - 36) / sizeof(uint32_t);
     for(uint32_t i = 0; i < num_of_entries; i++) {
       DESCRIPTION_HEADER* header = std::bit_cast<DESCRIPTION_HEADER*>(TO_HIGHER_HALF(rsdt->entries[i]));
-      if(kmemcmp((uint8_t*)header->signature, (uint8_t*)MCFG_SIG, strlen(MCFG_SIG))) {
+      if(kmemcmp((uint8_t*)header->signature, (uint8_t*)MCFG_SIG, strlen(MCFG_SIG)) == 0) {
         return std::bit_cast<MCFG*>(header);
       }
     }

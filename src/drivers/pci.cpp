@@ -25,6 +25,10 @@ common_pci_header* find_device(uint8_t classcode, uint8_t subclass, uint8_t prog
         for(uint32_t function = 0; function < 8; function++) {
         
           common_pci_header* pci_header = access_device_header(segment_group, bus, device, function);
+          if(pci_header == 0x0) {
+            continue;
+          }
+
           if(pci_header->class_code == classcode && pci_header->subclass == subclass && pci_header->prog_if == prog_if) {
             return pci_header;
           }

@@ -13,6 +13,11 @@
 #include <string>
 #include <algorithm>
 
+// @TODO: implement the RDY bit mechanics
+
+// @TODO: check why new way of returning data from ata driver is not working well
+
+// @TODO: Lower the verbosity of seabios to make it work again
 
 // @TODO: try to load seabios into the host's memory so I'll be able to see the instructions there.
 // Then, possibly I'll be able to figure out why it gets into an infinite loop
@@ -35,11 +40,11 @@
 
 extern "C" void svm_vmrun(guest_regs* regs, uint64_t vmcb);
 
-static uint64_t calculate_physical_addr(uint16_t seg, uint16_t off);
-static uint64_t calculate_physical_addr(uint32_t seg, uint32_t off);
+template <typename T>
+static uint64_t calculate_physical_addr(T seg, T off);
 
 //static uint32_t list_of_ports_to_intercept[] = {0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f5, 0x1f6, 0x1f7, 0x170, 0x171, 0x172, 0x173, 0x174, 0x175, 0x176, 0x177, 0x3f6, 0x3f7, 0x514, 0x518, 0x510, 0x511};
-static uint32_t list_of_ports_to_intercept[] = {0x514, 0x518, 0x510, 0x511, 0x1f0, 0x1f1, 0x1f2, 0x1f3, 0x1f4, 0x1f6, 0x1f7, 0x60608, 0x4240, 0x4241, 0x4242, 0x4243, 0x608};
+static uint32_t list_of_ports_to_intercept[] = {0x514, 0x518, 0x510, 0x511, 0x170, 0x171, 0x172, 0x173, 0x174, 0x175, 0x176, 0x177, 0x60608, 0x4240, 0x4241, 0x4242, 0x4243, 0x608, 0x3f6, 0x3f7,0x476, 0x377, 0x70, 0x71};
 //static uint32_t list_of_ports_to_intercept[] = {0x514, 0x518, 0x510, 0x511, 0x1f3};
 static uint64_t vmcb_addr = 0;
 static uint64_t host_state_area = 0;
@@ -63,6 +68,11 @@ static uint64_t calculate_physical_addr(uint16_t seg, uint16_t off) {
 }
 
 static uint64_t calculate_physical_addr(uint32_t seg, uint32_t off) {
+  uint64_t effective_addr = seg + off;
+  return walkTable(effective_addr, guests[curr_guest_idx].guest_cr3);
+}
+
+static uint64_t calculate_physical_addr(uint64_t seg, uint64_t off) {
   uint64_t effective_addr = seg + off;
   return walkTable(effective_addr, guests[curr_guest_idx].guest_cr3);
 }
@@ -233,8 +243,9 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
   guests[guest_idx].guest_cr3 = vm_mem_map;
   guests[guest_idx].guest_asid = guest_idx;
 
-  storage_device* storage_dev = new virtual_storage_device(const_cast<const char*>("storage"), 512);
+  storage_device* storage_dev = new virtual_storage_device(const_cast<const char*>("arch.iso"), 512);
   guests[guest_idx].ata_device = new ata_pio_device(storage_dev);
+  guests[guest_idx].cmos_dev = new cmos_device();
   
   uint32_t file_handle = vopenFile(codefile);
   if(file_handle == OPEN_FILE_ERROR) {
@@ -441,6 +452,9 @@ void handle_ioio_vmexit() {
   guest_regs* curr_guest_regs = &guests[curr_guest_idx].regs;
   uint64_t exitinfo1_val = vmcb_struct->control.exitinfo1;
   ioio_exitinfo1* exitinfo1 = std::bit_cast<ioio_exitinfo1*>(&exitinfo1_val);
+  if(exitinfo1->port == 0x608) {
+    exitinfo1->port = 0xe408; // Band-aid. Thats not a real solution and cannot be trusted as one. but it will be here to allow further developement for now. anyway it needs to be fixed in the future and should be reconsidered if any strange behavior is reoccuring.
+  }
   /* if(exitinfo1->port == 0x402) {
     int a = 10;
     (void)a;
@@ -448,7 +462,7 @@ void handle_ioio_vmexit() {
   if(((exitinfo1->port >= IO_MASTER_BASE_PORT) && (exitinfo1->port <= (IO_MASTER_BASE_PORT + 7)))      ||
     ((exitinfo1->port >= IO_MASTER_BASE_CONTROL) && (exitinfo1->port <= (IO_MASTER_BASE_CONTROL + 1))) ||
     ((exitinfo1->port >= IO_SLAVE_BASE_PORT) && (exitinfo1->port <= (IO_SLAVE_BASE_PORT + 7)))         ||
-    ((exitinfo1->port >= IO_SLAVE_CONTROL) && (exitinfo1->port <= (IO_SLAVE_CONTROL + 1)))  || (exitinfo1->port == 0x4242) || (exitinfo1->port == 0x4243)) {
+    ((exitinfo1->port >= IO_SLAVE_CONTROL) && (exitinfo1->port <= (IO_SLAVE_CONTROL + 1)))) {
     if(!test) {
       test = true;
       //kmemset((uint8_t*)TO_HIGHER_HALF(vmcb_struct->control.iopm_base_pa), 0xFF, 0x1000*3);
@@ -462,7 +476,37 @@ void handle_ioio_vmexit() {
       }
 
       //uint64_t output = guests[curr_guest_idx].ide.handle_transaction(transaction);
-      guests[curr_guest_idx].ata_device->dispatch_command(transaction);
+      ata_response response {
+        .buffer = NULL,
+        .size = 0,
+      };
+
+      uint64_t rcx = transaction.exitinfo.rep ? curr_guest_regs->rcx : 1;
+      uint64_t target_addr = 0;
+      if(transaction.exitinfo.rep) {
+      
+        target_addr = TO_HIGHER_HALF(calculate_physical_addr(vmcb_struct->state_save_area.es.base, curr_guest_regs->rdi));
+      } else {
+        
+        target_addr = (uint64_t)&vmcb_struct->state_save_area.rax;
+      }
+
+      for(uint64_t i = 0; i < rcx; i++) {
+        
+        guests[curr_guest_idx].ata_device->dispatch_command(transaction, &response);
+
+        kmemcpy((uint8_t*)target_addr, response.buffer, response.size);
+        target_addr += response.size;
+        
+        kfree(response.buffer);
+        response.buffer = NULL;
+        response.size = 0;
+      }
+
+      if(transaction.exitinfo.rep) {
+        curr_guest_regs->rcx = 0;
+      }
+
   } else if(exitinfo1->port == 0x518 || exitinfo1->port == 0x514) {
     if(exitinfo1->type == 0) {
 
@@ -489,6 +533,23 @@ void handle_ioio_vmexit() {
       //kmemset((uint8_t*)TO_HIGHER_HALF(low_phys_addr), 0x0, 8);
       //asm volatile("outl %0,%1" : : "a"(0), "Nd"(0x514));
       // get physical address and write that instead of the given nested virtual address for the dma to actually work   
+    }
+
+  } else if(exitinfo1->port == 0x70) {
+
+    if(vmcb_struct->state_save_area.rax == 0x38 || vmcb_struct->state_save_area.rax == 0x3d) {
+
+      guests[curr_guest_idx].cmos_dev->write_reg_idx((cmos_index)vmcb_struct->state_save_area.rax);
+    }
+
+  } else if(exitinfo1->port == 0x71) {
+
+    if(exitinfo1->type == 0) {
+
+      guests[curr_guest_idx].cmos_dev->write_reg(vmcb_struct->state_save_area.rax);
+    } else {
+
+      guests[curr_guest_idx].cmos_dev->write_reg(vmcb_struct->state_save_area.rax);
     }
 
   } else {

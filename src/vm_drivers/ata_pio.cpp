@@ -3,10 +3,25 @@
 #include "../common.h"
 #include "../vmcs/vmcs.h"
 #include "../fs/vfs.h"
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 
 #define SECTOR_SIZE 512
+
+static void construct_response(ata_response* response, uint8_t* data, uint32_t size);
+
+void construct_response(ata_response* response, uint8_t* data, uint32_t size) {
+  if(size == 0 || data == NULL) {
+    // kdebug()?;
+    return;
+  }
+
+  response->buffer = (uint8_t*)kmalloc(size);
+  response->size = size;
+  kmemcpy((uint8_t*)response->buffer, data, size);
+  return;
+}
 
 uint16_t ata_pio_device::handle_read_register(ata_pio_base_ports port) {
   switch(port) {
@@ -20,19 +35,25 @@ uint16_t ata_pio_device::handle_read_register(ata_pio_base_ports port) {
       return this->registers.sec_count_reg;
 
     case SECTOR_NUMBER_REGISTER_LBALOW:
-      return this->registers.sec_num_reg & 0xFFFF;
+      return this->registers.sec_num_reg & 0xFF;
 
     case CYLINDER_LOW_REGISTER_LBAMID:
-      return (this->registers.sec_num_reg << 16) & 0xFFFF;
+      return (this->registers.sec_num_reg << 8) & 0xFF;
 
     case CYLINDER_HIGH_REGISTER_LBAHIGH:
-      return (this->registers.sec_num_reg << 24) & 0xFFFF;
+      return (this->registers.cylinder_high_reg) & 0xFFFF;
 
     case DRIVE_HEAD_REGISTER:
       return this->registers.drive_head_reg;
 
     case STATUS_COMMAND_REGISTER:
       return this->registers.status_reg;
+
+    case ALT_STATUS_REG_DEV_CTRL:
+      return this->registers.alt_status_reg;
+
+    case DRIVE_ADDR_REG:
+      return this->registers.drive_addr_reg;
 
     default:
       return 0;
@@ -56,15 +77,18 @@ void ata_pio_device::handle_write_register(ata_pio_base_ports port, uint16_t dat
       return;
 
     case SECTOR_NUMBER_REGISTER_LBALOW:
-      this->registers.sec_num_reg = this->registers.sec_num_reg | (data & 0xFFFF);
+      this->registers.sec_num_reg &= 0xFF00;
+      this->registers.sec_num_reg = this->registers.sec_num_reg | (data & 0xFF);
       return;
 
     case CYLINDER_LOW_REGISTER_LBAMID:
-      this->registers.sec_num_reg = this->registers.sec_num_reg | ((data << 16) & 0xFFFF);
+      this->registers.sec_num_reg &= 0xFF00;
+      this->registers.sec_num_reg = this->registers.sec_num_reg | (data & 0xFF);
       return;
 
     case CYLINDER_HIGH_REGISTER_LBAHIGH:
-      this->registers.sec_num_reg = this->registers.sec_num_reg | ((data << 24) & 0xFFFF);
+      this->registers.cylinder_high_reg &= 0xFF00;
+      this->registers.cylinder_high_reg = this->registers.cylinder_high_reg | (data & 0xFFFF);
       return;
 
     case DRIVE_HEAD_REGISTER:
@@ -75,12 +99,15 @@ void ata_pio_device::handle_write_register(ata_pio_base_ports port, uint16_t dat
       this->registers.cmd_reg = data;
       return;
 
+    case ALT_STATUS_REG_DEV_CTRL:
+      this->registers.dev_ctrl_reg = data & 0xFF;
+
     default:
       return;
   }
 }
 
-void ata_pio_device::dispatch_command(ide_transaction transaction) {
+void ata_pio_device::dispatch_command(ide_transaction transaction, ata_response* response) {
   // handle register IO 
   if(((transaction.exitinfo.port > 0x1F0) && (transaction.exitinfo.port < 0x1F7)) ||
      ((transaction.exitinfo.port > 0x170) && (transaction.exitinfo.port < 0x177))) {
@@ -97,7 +124,8 @@ void ata_pio_device::dispatch_command(ide_transaction transaction) {
       } else {
         // read from register
         uint64_t ret_val = this->handle_read_register(port);
-        edit_vmcb_state(RAX, ret_val);
+        construct_response(response, (uint8_t*)&ret_val, sizeof(ret_val));
+        //edit_vmcb_state(RAX, ret_val);
       }
   }
 
@@ -105,7 +133,8 @@ void ata_pio_device::dispatch_command(ide_transaction transaction) {
   if((transaction.exitinfo.port == 0x1F7) || (transaction.exitinfo.port == 0x177)) {
     if(transaction.exitinfo.type == 1) {
       uint64_t ret_val = this->handle_read_register(STATUS_COMMAND_REGISTER);
-      edit_vmcb_state(RAX, ret_val);
+      construct_response(response, (uint8_t*)&ret_val, sizeof(ret_val));
+      // edit_vmcb_state(RAX, ret_val);
 
     } else {
       this->registers.cmd_reg = transaction.written_val;
@@ -117,14 +146,53 @@ void ata_pio_device::dispatch_command(ide_transaction transaction) {
 
   if((transaction.exitinfo.port == 0x1F0) || (transaction.exitinfo.port == 0x170)) {
     // write/read from data register, handle data IO
-    if(transaction.exitinfo.type == 1) {
+    if(transaction.exitinfo.type == 0) {
       this->handle_write_data(transaction);
 
     } else {
-      this->handle_read_data(transaction);
+      this->handle_read_data(transaction, response);
 
     }
   }
+
+  if(transaction.exitinfo.port == ALT_STATUS_REG_DEV_CTRL) {
+    if(transaction.exitinfo.type == 0) {
+      this->handle_write_register((ata_pio_base_ports)transaction.exitinfo.port, transaction.written_val);
+      this->handle_device_ctrl_reg_write();
+
+    } else {
+      this->handle_read_data(transaction, response);
+
+    }
+  }
+}
+
+void ata_pio_device::handle_device_ctrl_reg_write() {
+  if(getbit(this->registers.dev_ctrl_reg, DEV_CTRL_SRST)) {
+    this->handle_device_reset();
+  }
+
+  if(getbit(this->registers.dev_ctrl_reg, DEV_CTRL_NIEN)) {
+    // handle stop sending interrupts
+  }
+}
+
+void ata_pio_device::handle_device_reset() {
+  this->registers.alt_status_reg = 0;
+  this->registers.sec_count_reg = 0;
+  this->registers.cmd_reg = 0;
+  this->registers.data_reg = 0;
+  this->registers.error_reg = 0;
+  this->registers.status_reg = 0;
+  this->registers.features_reg = 0;
+  this->registers.dev_ctrl_reg = 0;
+  this->registers.drive_addr_reg = 0;
+  this->registers.drive_head_reg = 0;
+  this->registers.cylinder_high_reg = 0;
+  this->registers.sec_num_reg = 0;
+
+  // set status to ready
+  setbit(&this->registers.status_reg, STATUS_REG_RDY);
 }
 
 void ata_pio_device::handle_command(uint16_t command) {
@@ -136,6 +204,8 @@ void ata_pio_device::handle_command(uint16_t command) {
     this->buff_offset = 0;
     this->size_remaining = this->registers.sec_count_reg * this->storage_dev->get_sector_size();
     this->handle_read_sectors();
+    clearbit(&this->registers.status_reg, 0);
+    setbit(&this->registers.status_reg, 6);
 
   } else if(command == 0x30) {
     // write 28bit LBA
@@ -144,6 +214,8 @@ void ata_pio_device::handle_command(uint16_t command) {
     this->transfer_buff = (uint8_t*)kmalloc(this->registers.sec_count_reg * this->storage_dev->get_sector_size());
     this->buff_offset = 0;
     this->size_remaining = this->registers.sec_count_reg * this->storage_dev->get_sector_size();
+    clearbit(&this->registers.status_reg, 0);
+    setbit(&this->registers.status_reg, 6);
 
   } else if(command == 0x24) {
     // read 48bit LBA
@@ -153,6 +225,8 @@ void ata_pio_device::handle_command(uint16_t command) {
     this->buff_offset = 0;
     this->size_remaining = this->registers.sec_count_reg * this->storage_dev->get_sector_size();
     this->handle_read_sectors();
+    clearbit(&this->registers.status_reg, 0);
+    setbit(&this->registers.status_reg, 6);
 
   } else if(command == 0x34) {
     // write 48bit LBA
@@ -162,6 +236,8 @@ void ata_pio_device::handle_command(uint16_t command) {
     this->buff_offset = 0;
     this->size_remaining = this->registers.sec_count_reg * this->storage_dev->get_sector_size();
     this->handle_write_sectors();
+    clearbit(&this->registers.status_reg, 0);
+    setbit(&this->registers.status_reg, 6);
 
   } else if(command == 0xEC) {
     // identify command
@@ -171,28 +247,37 @@ void ata_pio_device::handle_command(uint16_t command) {
     this->buff_offset = 0;
     this->size_remaining = 512;
     this->handle_identify_command();
+    clearbit(&this->registers.status_reg, 0);
+    setbit(&this->registers.status_reg, 6);
 
+  } else {
+    setbit(&this->registers.status_reg, 0);
+    setbit(&this->registers.status_reg, 6);
   }
 }
 
-void ata_pio_device::handle_read_data(ide_transaction transaction) {
-  if(this->device_in_transfer == 1 && this->transfer_type == READ_SECTORS) {
+void ata_pio_device::handle_read_data(ide_transaction transaction, ata_response* response) {
+  if(this->device_in_transfer == 1 &&
+    (this->transfer_type == READ_SECTORS || this->transfer_type == IDENTIFY_CMD)) {
+
     if(transaction.exitinfo.sz8) {
       uint8_t data = 0;
       kmemcpy((uint8_t*)&data, (uint8_t*)&this->transfer_buff[this->buff_offset], sizeof(uint8_t));
-      edit_vmcb_state(RAX, data);
+      construct_response(response, (uint8_t*)&data, sizeof(data));
       this->buff_offset += sizeof(uint8_t);
 
     } else if(transaction.exitinfo.sz16) {
       uint16_t data = 0;
       kmemcpy((uint8_t*)&data, (uint8_t*)&this->transfer_buff[this->buff_offset], sizeof(uint16_t));
-      edit_vmcb_state(RAX, data);
+      construct_response(response, (uint8_t*)&data, sizeof(data));
+      // edit_vmcb_state(RAX, data);
       this->buff_offset += sizeof(uint16_t);
 
     } else if(transaction.exitinfo.sz32) {
       uint32_t data = 0;
       kmemcpy((uint8_t*)&data, (uint8_t*)&this->transfer_buff[this->buff_offset], sizeof(uint32_t));
-      edit_vmcb_state(RAX, data);
+      construct_response(response, (uint8_t*)&data, sizeof(data));
+      // edit_vmcb_state(RAX, data);
       this->buff_offset += sizeof(uint32_t);
 
     }
@@ -203,6 +288,7 @@ void ata_pio_device::handle_read_data(ide_transaction transaction) {
 
   if(this->buff_offset == this->size_remaining) {
     this->device_in_transfer = 0;
+    clearbit(&this->registers.status_reg, STATUS_REG_DRQ);
   } else {
     // notify that new data had arrived
   }
@@ -234,7 +320,10 @@ void ata_pio_device::handle_write_data(ide_transaction transaction) {
 }
 
 void ata_pio_device::handle_identify_command() {
-  kmemset(this->transfer_buff, 0x0, 512);
+  kmemset(this->transfer_buff, 0xff, 512);
+  //kmemset(&this->transfer_buff[100], 0x10, 1);
+  //kmemset(&this->transfer_buff[60], 0x10, 2);
+  setbit(&this->registers.status_reg, STATUS_REG_DRQ);
 }
 
 void ata_pio_device::handle_read_sectors() {
@@ -290,3 +379,12 @@ uint8_t virtual_storage_device::write_data(uint8_t* buff, uint32_t offset, uint3
 uint64_t virtual_storage_device::get_sector_size() {
   return this->sector_size;
 }
+
+/* uint64_t build_identify_cmd() {
+  // will might have problems with endians
+  uint16_t identify_cmd[256];
+  kmemset((uint8_t*)identify_cmd, 0x0, 256);
+  identify_cmd[0] = 0x040;
+  identify_cmd[1] = 16383; // number of cylinders 
+  identify_cmd[3] = 0;     // number of heads
+} */

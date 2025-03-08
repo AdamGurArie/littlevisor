@@ -1,6 +1,6 @@
 #include "ahci.h"
 #include "pci.h"
-#include "../mm/npaging.h"
+#include "../mm/paging.h"
 #include "../common.h"
 #include "../pmm.h"
 
@@ -38,7 +38,7 @@
 // static port_type port_types[32] = {};
 // static uint32_t sata_device_port = 0;
 
-/*void init_port(uint32_t port);
+void init_port(uint32_t port);
 void map_ports();
 
 void stop_command_engine(uint32_t port);
@@ -99,52 +99,68 @@ void ahci::init_port(uint32_t port) {
   // stop command engine
   stop_command_engine(port);
   // allocate phys memory for command list
-  uint64_t cmd_list_addr = kpalloc();
-  kmemset((uint8_t*)TO_HIGHER_HALF(cmd_list_addr), 0x0, 0x1000);
-  port_reg->pxclb = cmd_list_addr & 0xFFFFFFFF;
-  port_reg->pxclbu = (cmd_list_addr >> 32) & 0xFFFFFFFF;
-  
-  command_header* cmd_hdr = std::bit_cast<command_header*>(TO_HIGHER_HALF(cmd_list_addr));
+  uint64_t cmd_list_addr_phys = 0;
+  uint64_t cmd_list_addr_virt = 0;
+  allocate_page(
+      &cmd_list_addr_virt,
+      &cmd_list_addr_phys,
+      PRESENT_FLAG | RW_FLAG | CACHE_DIS_FLAG | WRITE_THROUGH_FLAG
+  );
+
+  kmemset((uint8_t*)cmd_list_addr_virt, 0x0, 0x1000);
+  port_reg->pxclb = (uint32_t)(cmd_list_addr_phys & 0xFFFFFFFF);
+  port_reg->pxclbu = (cmd_list_addr_phys >> 32) & 0xFFFFFFFF;
+
+  command_header* cmd_hdr = std::bit_cast<command_header*>(cmd_list_addr_virt);
   for(uint32_t i = 0; i < 32; i++) {
     cmd_hdr[i].prdtl = 8;
-    uint64_t cmd_table_addr = kpalloc();
-    kmemset((uint8_t*)TO_HIGHER_HALF(cmd_list_addr), 0x0, 0x1000);
-    cmd_hdr[i].ctba = cmd_table_addr & 0xFFFFFFFF;
-    cmd_hdr[i].ctbau = (cmd_table_addr >> 32) & 0xFFFFFFFF;
+    uint64_t cmd_table_addr_phys = 0;
+    uint64_t cmd_table_addr_virt = 0;
+    allocate_page(
+        &cmd_table_addr_virt,
+        &cmd_table_addr_phys,
+        PRESENT_FLAG | RW_FLAG | CACHE_DIS_FLAG | WRITE_THROUGH_FLAG
+    );
+
+    kmemset((uint8_t*)cmd_table_addr_virt, 0x0, 0x1000);
+    cmd_hdr[i].ctba = cmd_table_addr_phys & 0xFFFFFFFF;
+    cmd_hdr[i].ctbau = (cmd_table_addr_phys >> 32) & 0xFFFFFFFF;
   }
+
   // allocate phys memory for FIS area
-  uint64_t fis_area_addr = kpalloc();
-  kmemset((uint8_t*)TO_HIGHER_HALF(fis_area_addr), 0x0, 0x1000);
-  port_reg->pxfb = fis_area_addr & 0xFFFFFFFF;
-  port_reg->pxfbu = (fis_area_addr >> 32) & 0xFFFFFFFF; 
+  uint64_t fis_area_addr_phys = 0;
+  uint64_t fis_area_addr_virt = 0;
+  allocate_page(
+      &fis_area_addr_virt,
+      &fis_area_addr_phys,
+      PRESENT_FLAG | RW_FLAG | CACHE_DIS_FLAG | WRITE_THROUGH_FLAG
+  );
+
+  kmemset((uint8_t*)fis_area_addr_virt, 0x0, 0x1000);
+  port_reg->pxfb = fis_area_addr_phys & 0xFFFFFFFF;
+  port_reg->pxfbu = (fis_area_addr_phys >> 32) & 0xFFFFFFFF;
+
+  port_reg->pxclb = cmd_list_addr_phys & 0xFFFFFFFF;
+  
   // set pxcmd.fre
   uint64_t reg = port_reg->pxcmd;
   setbit((uint64_t*)&reg, HBA_PxCMD_FRE_OFF);
   port_reg->pxcmd = reg;
   // initiate a spin up(set pxcmd.sud 1)
-*/
-  /**reg = port_reg->pxcmd;
+
+  reg = port_reg->pxcmd;
   setbit((uint64_t*)&reg, HBA_PxCMD_SUD_OFF);
   port_reg->pxcmd = reg;
 
   // wait for an indications that device is connected(check how to do that)
-  reg = port_reg->pxssts;
-  while(getbit((uint64_t*)&reg, HBA_PxSSTS_DET_OFF) != 0x1 && getbit((uint64_t*)&reg, HBA_PxSCTL_DET_OFF) != 0x3) {
-    reg = port_reg->pxssts;
-  }
+
   // clear pxserr
   port_reg->pxserr = 0xFFFFFFFF;
   // wait for indication that sata is ready(check how to do it)
-  reg = port_reg->pxtfd;
-  while(getbit((uint64_t*)&reg, HBA_PxTFD_STS_ERR_OFF) == 0
-     && getbit((uint64_t*)&reg, HBA_PxTFD_STS_DRQ_OFF) == 0 
-     && getbit((uint64_t*)&reg, HBA_PxTFD_STS_BSY_OFF) == 0) {
-    reg = port_reg->pxtfd;
-  }**/
 
-  //start_command_engine(port);
-//}
-/*
+  start_command_engine(port);
+}
+
 void ahci::stop_command_engine(uint32_t port) {
   if(port > 31) {
     return;
@@ -160,9 +176,10 @@ void ahci::stop_command_engine(uint32_t port) {
   
   clearbit((uint64_t*)&reg, HBA_PxCMD_ST_OFF);
   clearbit((uint64_t*)&reg, HBA_PxCMD_FRE_OFF);
-  port_reg->pxcmd = 0xc006; //(uint32_t)(reg & 0xFFFFFFFF);
+  port_reg->pxcmd = reg;
+  // port_reg->pxcmd = 0xc006; //(uint32_t)(reg & 0xFFFFFFFF);
 
-  while(getbit((uint64_t*)&reg, HBA_PxCMD_FR_OFF) == 0 && getbit((uint64_t)&reg, HBA_PxCMD_CR_OFF) == 0) {
+  while(getbit((uint64_t*)&reg, HBA_PxCMD_FR_OFF) != 0 && getbit((uint64_t)&reg, HBA_PxCMD_CR_OFF) != 0) {
     reg = port_reg->pxcmd;
   }
   
@@ -213,20 +230,33 @@ void ahci::start_command_engine(uint32_t port) {
   port_reg->pxcmd = reg;
 }
 
+bool ahci::find_avail_port(uint32_t& cmd_slot) {
+  port_register_struct* port_reg = &ahci_hba->port_registers[this->sata_device_port];
+  uint64_t pxsact = port_reg->pxsact;
+  uint64_t pxci = port_reg->pxci;
+
+  for(cmd_slot = 0; cmd_slot < 32; (cmd_slot)++) {
+    if(getbit((uint64_t)pxsact, cmd_slot) == 0 && getbit((uint64_t)pxci, cmd_slot) == 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void ahci::commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_sectors, bool write) {
   port_register_struct* port_reg = &ahci_hba->port_registers[sata_device_port];
   // find available command slot
   uint64_t pxsact = port_reg->pxsact;
   uint64_t pxci = port_reg->pxci;
   uint32_t cmd_slot = 0;
-  for(cmd_slot = 0; cmd_slot < 32; cmd_slot++) {
-    if(getbit((uint64_t)pxsact, cmd_slot) == 0 && getbit((uint64_t)pxci, cmd_slot) == 0) {
-      break; 
-    }
+  if(this->find_avail_port(cmd_slot) == false) {
+    return;
   }
 
   // build command FIS
   command_header* cmd_hdr = (command_header*)(TO_HIGHER_HALF((port_reg->pxclb | ((uint64_t)port_reg->pxclbu << 32))));
+  cmd_hdr += cmd_slot;
   cmd_hdr->cfl = sizeof(FIS_REG_H2D);
   cmd_hdr->atapi = 0;
   cmd_hdr->write = write ? 1 : 0;
@@ -242,12 +272,12 @@ void ahci::commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num
     cmd_tbl->prdt_list[i].dbau = ((uint64_t)buff >> 32) & 0xFFFFFFFF;
     cmd_tbl->prdt_list[i].dbc = 8*1024 - 1;
     cmd_tbl->prdt_list[i].ioc = 0;
-    buff += 4*1024;
-    num_of_sectors -= 16;
+    buff += 8*1024;
+    num_of_sectors -= 16;  // one sector is 512 bytes, need to refactor that
   }
 
   cmd_tbl->prdt_list[i].dba = (uint64_t)buff & 0xFFFFFFFF;
-  //cmd_tbl->prdt_list[i].dbau = ((uint64_t)buff >> 32) & 0xFFFFFFFF;
+  cmd_tbl->prdt_list[i].dbau = ((uint64_t)buff >> 32) & 0xFFFFFFFF;
   cmd_tbl->prdt_list[i].dbc = num_of_sectors * 512 - 1;
   cmd_tbl->prdt_list[i].ioc = 0;
 
@@ -269,23 +299,39 @@ void ahci::commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num
   fis->lba5 = (start_sector >> 48) & 0xFF;
   fis->device = 1<<6;
   port_reg->pxie = 0xFFFFFFFF;
+  
+  uint32_t num_of_spins = 0;
+  while(getbit(port_reg->pxtfd, 7) == 0 && getbit(port_reg->pxtfd, 3) == 0 && num_of_spins > 1000000) {
 
-  port_reg->pxci |= 1<<cmd_slot; 
-  while((port_reg->pxci & (1<<cmd_slot)) == 1);
+    num_of_spins++;
+    
+    if(num_of_spins == 1000000) {
+      kpanic();
+    }
+
+  }
+
+  port_reg->pxci = 1<<cmd_slot; 
+  while(true) {
+    if ((port_reg->pxci & (1<<cmd_slot)) == 0) {
+      break;
+    }
+
+    if(getbit(port_reg->pxis, 30) == 1) {
+      kpanic();
+    }
+  }
 }
 
 uint8_t ahci::read_sector(uint8_t* buff, uint64_t start_sector, uint16_t size) {
   uint16_t real_size = size / 512;
-  uint8_t wrap_buff[real_size*512];
-  kmemset(wrap_buff, 0x0, sizeof(wrap_buff));
-  commit_transaction(wrap_buff, start_sector, real_size, false);
-  kmemcpy(buff, wrap_buff, size);
+  //uint8_t* wrap_buff = (uint8_t*)kmalloc(512*real_size);
+  //kmemset(wrap_buff, 0x0, sizeof(wrap_buff));
+  commit_transaction(buff, start_sector, real_size, false);
+  //kmemcpy(buff, wrap_buff, size);
 }
 
 uint8_t ahci::write_sector(uint8_t* buff, uint64_t start_sector, uint16_t size) {
-  uint16_t real_size = size / 512;
-  //kmemcpy(wrap_buff, buff, size);
-  commit_transaction(buff, start_sector, real_size, true);
-  //kmemcpy(buff, wrap_buff, size);
+  commit_transaction(buff, start_sector, 1, true);
 }
-*/
+

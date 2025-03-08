@@ -16,15 +16,15 @@ svm_vmrun:
   mov rcx, qword [rdi + (8 * 1)]
   mov rdx, qword [rdi + (8 * 2)]
   mov rsi, qword [rdi + (8 * 3)]
-  mov rbp, qword [rdi + (8 * 4)]
-  mov r8,  qword [rdi + (8 * 5)]
-  mov r9,  qword [rdi + (8 * 6)]
-  mov r10, qword [rdi + (8 * 7)]
-  mov r11, qword [rdi + (8 * 8)]
-  mov r12, qword [rdi + (8 * 9)]
-  mov r13, qword [rdi + (8 * 10)]
-  mov r14, qword [rdi + (8 * 11)]
-  mov r15, qword [rdi + (8 * 12)]
+  mov rbp, qword [rdi + (8 * 5)]
+  mov r8,  qword [rdi + (8 * 6)]
+  mov r9,  qword [rdi + (8 * 7)]
+  mov r10, qword [rdi + (8 * 8)]
+  mov r11, qword [rdi + (8 * 9)]
+  mov r12, qword [rdi + (8 * 10)]
+  mov r13, qword [rdi + (8 * 11)]
+  mov r14, qword [rdi + (8 * 12)]
+  mov r15, qword [rdi + (8 * 13)]
 
   push rdi
   mov rdi, qword [rdi + 0x20]
@@ -39,15 +39,15 @@ svm_vmrun:
   mov qword [rdi + (8 * 1)], rcx
   mov qword [rdi + (8 * 2)], rdx
   mov qword [rdi + (8 * 3)], rsi
-  mov qword [rdi + (8 * 4)], rbp
-  mov qword [rdi + (8 * 5)], r8
-  mov qword [rdi + (8 * 6)], r9
-  mov qword [rdi + (8 * 7)], r10
-  mov qword [rdi + (8 * 8)], r11
-  mov qword [rdi + (8 * 9)], r12
-  mov qword [rdi + (8 * 10)], r13
-  mov qword [rdi + (8 * 11)], r14
-  mov qword [rdi + (8 * 12)], r15
+  mov qword [rdi + (8 * 5)], rbp
+  mov qword [rdi + (8 * 6)], r8
+  mov qword [rdi + (8 * 7)], r9
+  mov qword [rdi + (8 * 8)], r10
+  mov qword [rdi + (8 * 9)], r11
+  mov qword [rdi + (8 * 10)], r12
+  mov qword [rdi + (8 * 11)], r13
+  mov qword [rdi + (8 * 12)], r14
+  mov qword [rdi + (8 * 13)], r15
 
   pop r8
   pop r9

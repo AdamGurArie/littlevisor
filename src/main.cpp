@@ -14,6 +14,7 @@
 #include <cstring>
 #include "pmm.h"
 #include "interrupts.h"
+#include "drivers/ahci.h"
 
 __attribute__((used, section(".requests")))
 static volatile LIMINE_BASE_REVISION(2);
@@ -64,14 +65,18 @@ void _start() {
   MCFG* mcfg = get_mcfg();
   init_pci((uint64_t)mcfg);
   init_heap();
-  asm volatile("mov $0xffff8000000b8000, %rax");
-  asm volatile("mov $0x0F61, (%rax)");
+  // asm volatile("mov $0xffff8000000b8000, %rax");
+  // asm volatile("mov $0x0F61, (%rax)");
   // int i = 1/0;
   // (void)i;
-  // init_ahci();
+  uint8_t buff[512] = {0};
+  ahci ahci_dev = ahci();
+  ahci_dev.commit_transaction(buff, 1, 1, false);
+  ahci_dev.write_sector(buff, 0, 512);
+  
   //asm volatile("int3");
   limine_file* limine_f = module_request.response->modules[0];
-  save_host_pageMap();
+  //save_host_pageMap();
   ramDisk* ramdisk = new ramDisk((uintptr_t)limine_f->address);
   init_fs(ramdisk);
   char file_buff[16];

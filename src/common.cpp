@@ -2,9 +2,34 @@
 #include "kheap.h"
 #include <cstdint>
 
-//template<typename T>
-void write_to_port(uint16_t port, uint8_t data) {
-  asm volatile("outb %0, %1" :: "r"(data), "r"(port));
+template<typename T>
+void write_to_port(uint16_t port, T data) {
+  asm volatile("out %0, %1" :: "r"(data), "r"(port));
+}
+
+template void write_to_port(uint16_t port, uint8_t data);
+template void write_to_port(uint16_t port, uint16_t data);
+template void write_to_port(uint16_t port, uint32_t data);
+
+uint8_t read_from_port_byte(uint16_t port) {
+  uint8_t data = 0;
+  asm volatile("inb %1, %0" : "=r"(data) : "Nd"(port));
+  
+  return data;
+}
+
+uint16_t read_from_port_word(uint16_t port) {
+  uint16_t data = 0;
+  asm volatile("inw %1, %0" : "=r"(data) : "Nd"(port));
+
+  return data;
+}
+
+uint32_t read_from_port_dword(uint16_t port) {
+  uint32_t data = 0;
+  asm volatile("inl %1, %0" : "=r"(data) : "Nd"(port));
+  
+  return data;
 }
 
 void print_to_serial(uint8_t* text, int size) {

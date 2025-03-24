@@ -14,14 +14,14 @@ enum port_type {
 };
 
 enum fis_types {
-  REG_H2D = 0x27,
-  REG_D2H = 0x34,
-  DMA_D2H = 0x39,
-  DMA_BIDIRECTIONAL = 0x41,
-  DATA = 0x46,
-  BIST = 0x58,
-  PIO_SETUP = 0x5F,
-  DEV_BITS = 0xA1
+  FIS_REG_H2D = 0x27,
+  FIS_REG_D2H = 0x34,
+  FIS_DMA_D2H = 0x39,
+  FIS_DMA_BIDIRECTIONAL = 0x41,
+  FIS_DATA = 0x46,
+  FIS_BIST = 0x58,
+  FIS_PIO_SETUP = 0x5F,
+  FIS_DEV_BITS = 0xA1
 };
 
 struct generic_host_control_struct {
@@ -101,7 +101,7 @@ struct command_table {
   prdt prdt_list[];
 } __attribute__((packed));
 
-struct FIS_REG_H2D {
+struct FIS_REG_H2D_S {
   uint8_t fis_type;
   uint8_t pmport : 4;
   uint8_t rsv0 : 3;

@@ -4,6 +4,40 @@
 #include <stdint.h>
 //static MCFG* mcfg = (MCFG*)0;
 
+enum HEADER_TYPE_0_OFFSETS {
+  VENDOR_ID = 0,
+  DEVICE_ID = 2,
+  COMMAND = 4,
+  STATUS = 6,
+  REVISION_ID = 8,
+  PROG_IF = 9,
+  SUBCLASS = 10,
+  CLASS_CODE = 11,
+  CACHE_LINE_SIZE = 12,
+  LATENCY_TIMER = 13,
+  HEADER_TYPE = 14,
+  BIST = 15,
+  BAR0 = 16,
+  BAR1 = 20,
+  BAR2 = 24,
+  BAR3 = 28,
+  BAR4 = 32,
+  BAR5 = 36,
+  CARDBUS_CIS_PTR = 40,
+  SUBSYS_VENDOR_ID = 44,
+  SUBSYSTEM_ID = 48,
+  EXP_ROM_BASE_ADDR = 50,
+  CAPABILITIES_PTR = 54,
+  RESERVED_1 = 55,
+  RESERVED_2 = 59 
+};
+
+struct pci_device_descriptor {
+  uint32_t bus;
+  uint32_t device;
+  uint32_t function;
+};
+
 struct status_register {
   uint8_t reserved_1 : 2;
   uint8_t interrupt_status : 1;
@@ -124,6 +158,13 @@ struct header_type_2 {
 } __attribute__((packed));
 
 void init_pci(uint64_t mcfg_ptr);
-common_pci_header* find_device(uint8_t classcode, uint8_t subclass, uint8_t prog_if);
+bool find_device(pci_device_descriptor* device_descriptor, uint8_t classcode, uint8_t subclass, uint8_t prog_if);
 common_pci_header* access_device_header(uint8_t segment_group, uint8_t bus, uint8_t device, uint8_t function);
 void enable_device_memio(uint8_t segment_group, uint8_t bus, uint8_t device, uint8_t function);
+uint32_t read_configuration_dword(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset);
+uint32_t get_header_bar(pci_device_descriptor* device_descriptor, uint8_t bar_number);
+uint8_t read_device_identifier(uint8_t bus, uint8_t slot, uint8_t func, HEADER_TYPE_0_OFFSETS offset);
+common_pci_header* find_device(uint8_t classcode, uint8_t subclass, uint8_t prog_if);
+void pci_enable_interrupts(pci_device_descriptor* device_descriptor);
+void pci_enable_dma(pci_device_descriptor* device_descriptor);
+void pci_enable_bus_mastering(pci_device_descriptor* device_descriptor);

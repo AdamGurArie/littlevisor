@@ -55,17 +55,18 @@ ahci::ahci() {
 }
 
 void ahci::init_ahci() {
-  common_pci_header* ahci_common_header = find_device(AHCI_CLASS, AHCI_SUBCLASS, PROG_IF);
-  if(ahci_common_header->header_type != 0x0) {
+  //common_pci_header* pci_header = find_device(AHCI_CLASS, AHCI_SUBCLASS, PROG_IF);
+  pci_device_descriptor device_descriptor = {};
+  if(find_device(&device_descriptor, AHCI_CLASS, AHCI_SUBCLASS, PROG_IF) == false) {
     //panic
     return;
-  }
-
-  setbit((uint64_t*)&ahci_common_header->cmd_reg, 1);
-  clearbit((uint64_t*)&ahci_common_header->cmd_reg, 10);
-
-  header_type_0* ahci_header = std::bit_cast<header_type_0*>(ahci_common_header);
-  ahci_hba = std::bit_cast<hba_mem_regs*>(TO_HIGHER_HALF(ahci_header->bar5));
+  } 
+  // (void)pci_header;
+  
+  pci_enable_interrupts(&device_descriptor);
+  pci_enable_dma(&device_descriptor);
+  uint64_t ahci_hba_addr = get_header_bar(&device_descriptor, 5);  // @TODO: replace this magic number with define
+  ahci_hba = std::bit_cast<hba_mem_regs*>(TO_HIGHER_HALF(ahci_hba_addr));
   // init all ports
   for(uint32_t i = 0; i < 32; i++) {
     if(getbit(ahci_hba->generic_host_control.pi, i) == 1) {
@@ -95,7 +96,8 @@ void ahci::init_port(uint32_t port) {
     return;
   }
 
-  port_register_struct* port_reg = &ahci_hba->port_registers[port];
+  port_register_struct port_reg{0};
+  kmemcpy((uint8_t*)&port_reg, (uint8_t*)&ahci_hba->port_registers[port], sizeof(port_register_struct));
   // stop command engine
   stop_command_engine(port);
   // allocate phys memory for command list
@@ -107,9 +109,9 @@ void ahci::init_port(uint32_t port) {
       PRESENT_FLAG | RW_FLAG | CACHE_DIS_FLAG | WRITE_THROUGH_FLAG
   );
 
-  kmemset((uint8_t*)cmd_list_addr_virt, 0x0, 0x1000);
-  port_reg->pxclb = (uint32_t)(cmd_list_addr_phys & 0xFFFFFFFF);
-  port_reg->pxclbu = (cmd_list_addr_phys >> 32) & 0xFFFFFFFF;
+  // kmemset((uint8_t*)cmd_list_addr_virt, 0x0, 0x1000);
+  port_reg.pxclb = (uint32_t)(cmd_list_addr_phys & 0xFFFFFFFF);
+  port_reg.pxclbu = (cmd_list_addr_phys >> 32) & 0xFFFFFFFF;
 
   command_header* cmd_hdr = std::bit_cast<command_header*>(cmd_list_addr_virt);
   for(uint32_t i = 0; i < 32; i++) {
@@ -137,25 +139,27 @@ void ahci::init_port(uint32_t port) {
   );
 
   kmemset((uint8_t*)fis_area_addr_virt, 0x0, 0x1000);
-  port_reg->pxfb = fis_area_addr_phys & 0xFFFFFFFF;
-  port_reg->pxfbu = (fis_area_addr_phys >> 32) & 0xFFFFFFFF;
+  port_reg.pxfb = fis_area_addr_phys & 0xFFFFFFFF;
+  port_reg.pxfbu = (fis_area_addr_phys >> 32) & 0xFFFFFFFF;
 
-  port_reg->pxclb = cmd_list_addr_phys & 0xFFFFFFFF;
+  //port_reg.pxclb = cmd_list_addr_phys & 0xFFFFFFFF;
   
   // set pxcmd.fre
-  uint64_t reg = port_reg->pxcmd;
+  uint64_t reg = port_reg.pxcmd;
   setbit((uint64_t*)&reg, HBA_PxCMD_FRE_OFF);
-  port_reg->pxcmd = reg;
+  port_reg.pxcmd = reg;
   // initiate a spin up(set pxcmd.sud 1)
 
-  reg = port_reg->pxcmd;
+  reg = port_reg.pxcmd;
   setbit((uint64_t*)&reg, HBA_PxCMD_SUD_OFF);
-  port_reg->pxcmd = reg;
+  port_reg.pxcmd = reg;
 
   // wait for an indications that device is connected(check how to do that)
 
   // clear pxserr
-  port_reg->pxserr = 0xFFFFFFFF;
+  port_reg.pxserr = 0xFFFFFFFF;
+  
+  kmemcpy((uint8_t*)&ahci_hba->port_registers[port], (uint8_t*)&port_reg, sizeof(port_register_struct));
   // wait for indication that sata is ready(check how to do it)
 
   start_command_engine(port);
@@ -281,9 +285,9 @@ void ahci::commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num
   cmd_tbl->prdt_list[i].dbc = num_of_sectors * 512 - 1;
   cmd_tbl->prdt_list[i].ioc = 0;
 
-  FIS_REG_H2D* fis = (FIS_REG_H2D*)&cmd_tbl->cfis;
+  FIS_REG_H2D_S* fis = (FIS_REG_H2D_S*)&cmd_tbl->cfis;
   kmemset((uint8_t*)fis, 0x0, sizeof(FIS_REG_H2D));
-  fis->fis_type = REG_H2D;
+  fis->fis_type = FIS_REG_H2D;
   fis->command = write ? ATA_CMD_WRITE_DMA_EX : ATA_CMD_READ_DMA_EX;
   fis->countl = num_of_sectors & 0xFF;
   fis->counth = (num_of_sectors >> 8) & 0xFF;

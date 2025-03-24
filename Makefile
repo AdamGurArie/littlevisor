@@ -3,7 +3,7 @@ BUILD_DIR = build
 LINKER_FILE = linker.ld
 OUTPUT := $(BUILD_DIR)/kernel.elf
 ISO := $(BUILD_DIR)/kernel.iso
-COMPILATION_FLAGS := -g -Wall -fno-exceptions -fno-rtti -Wextra -pipe -fno-stack-protector -mno-red-zone -Waddress-of-packed-member -fpermissive -nostdlib -std=c++20 $(INCLUDE_PATH)
+COMPILATION_FLAGS := -o0 -g -Wall -fno-exceptions -fno-rtti -Wextra -pipe -fno-stack-protector -mno-red-zone -Waddress-of-packed-member -fpermissive -nostdlib -std=c++20 $(INCLUDE_PATH)
 
 LDFLAGS ?= -nostdlib -std=c++20 $(INCLUDE_PATH)
 
@@ -24,7 +24,8 @@ override INTERNALCFLAGS :=   \
 	-mcmodel=kernel      \
 	-fsanitize=address   \
 	-static-libasan      \
-	-MMD
+	-MMD                 \
+	-o0
 
 override INTERNALLDFLAGS :=    \
 	-Tlinker.ld            \
@@ -64,7 +65,7 @@ $(ISO): $(OUTPUT) limine
 	cp -v build/kernel.elf iso_root/boot/
 	mkdir -p iso_root/boot/limine
 	cp -v limine.conf limine/limine-bios.sys limine/limine-bios-cd.bin limine/limine-uefi-cd.bin iso_root/boot/limine/
-	cp -v test_image.img iso_root/boot/
+	cp -v test_drive.img iso_root/boot/
 	mkdir -p iso_root/EFI/BOOT 
 	cp -v limine/BOOTX64.EFI iso_root/EFI/BOOT/
 	cp -v limine/BOOTIA32.EFI iso_root/EFI/BOOT/
@@ -78,10 +79,14 @@ $(ISO): $(OUTPUT) limine
 
 debug:
 	qemu-system-x86_64 -m 10G -M q35 -machine type=pc,accel=kvm -cdrom $(ISO) \
-	-drive id=disk,file=test_image.img,format=raw,if=none \
-	-device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 \
-	-trace ahci* -S -d int -debugcon stdio -cpu max -boot d -no-reboot -no-shutdown -s -S \
-	-d exec -D qemu_exec.log
+  	-drive id=disk1,file=test_drive.img,format=raw,if=none \
+  	-device nvme,drive=disk1,serial=nvme-1 \
+  	-trace ahci* -S -d int -debugcon stdio -cpu max -boot d -no-reboot -no-shutdown -s -S \
+  	-d exec -D qemu_exec.log
+
+qemu:
+	qemu-system-x86_64 -m 10G -M pc -machine type=pc,accel=kvm -cdrom $(ISO) \
+	-cpu max -no-reboot -no-shutdown
 
 clean:
 	@rm -rf $(BUILD_DIR)

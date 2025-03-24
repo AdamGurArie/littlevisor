@@ -15,6 +15,8 @@
 #include "pmm.h"
 #include "interrupts.h"
 #include "drivers/ahci.h"
+#include "drivers/nvme.h"
+#include "mm/paging.h"
 
 __attribute__((used, section(".requests")))
 static volatile LIMINE_BASE_REVISION(2);
@@ -65,14 +67,23 @@ void _start() {
   MCFG* mcfg = get_mcfg();
   init_pci((uint64_t)mcfg);
   init_heap();
+  init_host_allocator();
+  uint64_t virt_addr = 0;
+  uint64_t phys_addr = kpalloc();
+  //allocate_page(&virt_addr, &phys_addr, PRESENT_FLAG | RW_FLAG);
+  kmemset((uint8_t*)TO_HIGHER_HALF(phys_addr), 0x0, 0x200);
+  phys_addr = walk_host_tables(TO_HIGHER_HALF(phys_addr));
+  // map_host_page((uint64_t)&mcfg, phys_addr, PRESENT_FLAG | RW_FLAG);
+
   // asm volatile("mov $0xffff8000000b8000, %rax");
   // asm volatile("mov $0x0F61, (%rax)");
   // int i = 1/0;
   // (void)i;
-  uint8_t buff[512] = {0};
-  ahci ahci_dev = ahci();
-  ahci_dev.commit_transaction(buff, 1, 1, false);
-  ahci_dev.write_sector(buff, 0, 512);
+  // uint8_t buff[512] = {0};
+  //ahci ahci_dev = ahci();
+  //ahci_dev.commit_transaction(buff, 1, 1, false);
+  //ahci_dev.write_sector(buff, 0, 512);
+  init_nvme();
   
   //asm volatile("int3");
   limine_file* limine_f = module_request.response->modules[0];

@@ -46,7 +46,9 @@ struct Stack
 
 [[noreturn]] void kpanic();
 
-void write_to_port(uint16_t port, uint8_t data);
+template<typename T>
+void write_to_port(uint16_t port, T data);
+
 void print_to_serial(uint8_t* text, int size);
 
 inline bool getbit(uint64_t val, uint8_t pos) {
@@ -65,12 +67,23 @@ inline void clearbit(uint64_t* val, uint8_t pos) {
   *val = *val & ~((uint64_t)1 << pos);
 }
 
-inline void clearbit(uint8_t* val, uint8_t pos) {
-  *val = *val & ~((uint8_t)1 << pos);
+template<typename T>
+inline void clearbit(T* val, uint8_t pos) {
+  *val = *val & ~((T)1 << pos);
 }
 
+//@TODO: template this
+//template<typename T>
 inline void setbit(uint64_t* val, uint8_t pos) {
   *val = *val | ((uint64_t)1 << pos);
+}
+
+inline void setbit(uint16_t* val, uint8_t pos) {
+  *val = *val | ((uint16_t)1 << pos);
+}
+
+inline void setbit(uint32_t* val, uint8_t pos) {
+  *val = *val | ((uint32_t)1 << pos);
 }
 
 inline void setbit(uint8_t* val, uint8_t pos) {
@@ -79,6 +92,10 @@ inline void setbit(uint8_t* val, uint8_t pos) {
 
 inline uint8_t getbit(uint64_t* val, uint8_t pos) {
   return (*val >> pos) & (uint64_t)1;
+}
+
+inline uint8_t getbit(uint32_t* val, uint8_t pos) {
+  return (*val >> pos) & (uint32_t)1;
 }
 
 uint32_t kToLittleEndian(uint32_t value);
@@ -112,5 +129,7 @@ inline uint64_t kmin(uint64_t a, uint64_t b) {
 void* operator new(std::size_t size);
 void operator delete(void* p) noexcept;
 void operator delete(void* p, uint64_t param) noexcept;
-//template<acceptable_types T>
-//T read_from_port(uint16_t port);
+
+uint8_t read_from_port_byte(uint16_t port);
+uint16_t read_from_port_word(uint16_t port);
+uint32_t read_from_port_dword(uint16_t port);

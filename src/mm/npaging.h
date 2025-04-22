@@ -15,3 +15,4 @@ uint64_t get_host_pageMap();
 void create_linear_virtual_space(uint64_t size);
 uint64_t create_clean_virtual_space();
 void identity_map(uint64_t cr3, uint64_t start_addr, uint64_t num_of_pages, uint16_t flags);
+void map_range(uint64_t cr3, uint64_t virt_addr, uint64_t phys_addr, uint64_t num_of_pages, uint16_t flags);

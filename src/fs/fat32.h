@@ -3,6 +3,7 @@
 #include <cstdint>
 #include "../drivers/storage_device.h"
 #include "../drivers/ram_disk.h"
+#include "../drivers/ahci.h"
 
 struct FAT32 {
   uint32_t sectors_per_fat;
@@ -84,7 +85,7 @@ enum NAME_VALIDITY {
   NAME_WITHOUT_EXT,
 };
 
-void init_fs(ramDisk* storage_dev);
+void init_fs(ahci* storage_dev);
 uint8_t writeFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size);
 uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size);
 uint32_t getFileSize(const char* filename);

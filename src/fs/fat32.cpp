@@ -21,11 +21,11 @@
 
 static BPB bpb_struct = {};
 static uint32_t first_data_sector = 0;
-static ramDisk* storage_dev = 0;
+static ahci* storage_dev = 0;
 
 void encode_name(const char* name, char* encoded_name);
 
-void init_fs(ramDisk* storage) {
+void init_fs(ahci* storage) {
   storage_dev = storage;
   storage_dev->read_data((uint8_t*)&bpb_struct, 0, sizeof(BPB));
   // uint32_t num_of_sectors = bpb_struct.large_sector_count;
@@ -49,7 +49,7 @@ uint32_t getEntryByCluster(uint32_t cluster) {
     return -1;
   }
 
-  storage_dev->read_sector(sector_buff, fat_sector, 1);
+  storage_dev->read_sector(fat_sector, sector_buff);
   uint32_t fat_entry = 0;
   kmemcpy((uint8_t*)&fat_entry, &sector_buff[entry_offset], sizeof(uint32_t));
   kfree(sector_buff);
@@ -89,7 +89,9 @@ FILE_DESCRIPTOR findFile(const char* filename) {
     for(uint32_t sector = 0; sector < bpb_struct.sectors_per_clusted; sector++) {
       uint32_t curr_sector_num = cluster_to_sector(curr_clust);
       uint8_t curr_sector[bpb_struct.bytes_per_sector];
-      storage_dev->read_data(curr_sector, curr_sector_num*SECTOR_SIZE, 1*SECTOR_SIZE);
+      if(storage_dev->read_data(curr_sector, curr_sector_num*SECTOR_SIZE, 1*SECTOR_SIZE) == 1) {
+        return fd;
+      }
 
       for(uint32_t offset = 0; offset < bpb_struct.bytes_per_sector; offset+=32) {
         FILE_DESCRIPTOR* file_desc = std::bit_cast<FILE_DESCRIPTOR*>(curr_sector + offset);
@@ -140,14 +142,11 @@ NAME_VALIDITY check_validity(const char* name) {
     }
   }
   
-  if(name_len > 8) {
-    for(uint8_t i = 0; i < name_len; i++) {
-      if(name[i] == '.') {
-        return NAME_WITH_EXT;
-      }
+  
+  for(uint8_t i = 0; i < name_len; i++) {
+    if(name[i] == '.') {
+      return NAME_WITH_EXT;
     }
-
-    return NAME_INVALID;
   }
 
   return NAME_WITHOUT_EXT;
@@ -214,10 +213,11 @@ uint8_t readFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
   
   if(offset_of_data > 0) {
     uint32_t sector = cluster_to_sector(fat_entry);
+    uint32_t size_to_read = SECTOR_SIZE - offset_of_data > size ? size : SECTOR_SIZE - offset_of_data;
     storage_dev->read_data(
         file_buff,
         sector * SECTOR_SIZE + offset_of_data,
-        SECTOR_SIZE - offset_of_data
+        size_to_read
     );
 
     offset += SECTOR_SIZE - offset_of_data;

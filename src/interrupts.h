@@ -23,10 +23,16 @@ struct idtr_reg {
   uint64_t base_addr;
 } __attribute__((packed));
 
-void init_idtentry(uint16_t vector, uint64_t isr_addr, uint8_t dpl, uint8_t ist, uint8_t type);
+void init_idt_entry(uint16_t vector, uint64_t isr_addr, uint8_t dpl, uint8_t ist, uint8_t type);
 
 void loadidt();
 
 void init_idt();
 
 void page_fault_handler(Stack* stack);
+
+void irq_clear_mask(uint8_t irq_line);
+
+void irq_set_mask(uint8_t irq_line);
+
+void pic_remap(uint32_t offset1, uint32_t offset2);

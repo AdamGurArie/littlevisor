@@ -1,18 +1,20 @@
 bits 64
 
 extern _Z11general_isrh
-extern _Z18page_fault_handlerP5Stack
+extern _Z18page_fault_handlerhP5Stack
+extern _Z11pit_handlerP5Stack
 global general_isr_tram
+global pagefault_handler_tram
+global isr_pit_handler
 
 %macro pushAll 0
-    push rsp
-    push rbp
     push rax
     push rbx
     push rcx
     push rdx
     push rsi
     push rdi
+    push rbp
     push r8
     push r9
     push r10
@@ -32,14 +34,13 @@ global general_isr_tram
     pop r10
     pop r9
     pop r8
+    pop rbp
     pop rdi
     pop rsi
     pop rdx
     pop rcx
     pop rbx
     pop rax
-    pop rbp
-    pop rsp
 %endmacro
 
 general_isr_tram:
@@ -55,19 +56,20 @@ general_isr_tram:
   mov rsp, rax
 
   popAll
-
+  
+  sti
   iretq
 
 
 pagefault_handler_tram:
-  push qword 0
   cld
 
   pushAll
 
-  mov rdi, rsp
+  mov rsi, rsp
+  mov rdi, 0xE
 
-  call _Z18page_fault_handlerP5Stack
+  call _Z18page_fault_handlerhP5Stack
 
   mov rsp, rax
 
@@ -77,11 +79,26 @@ pagefault_handler_tram:
 
   iretq
 
+isr_pit_handler: 
+  push 0
+  push 32
+  pushAll
+  mov rdi, rsp
+  cld
+  call _Z11pit_handlerP5Stack
+  mov al, 0x20
+  out 0x20, al
+  out 0xA0, al
+  popAll
+  add rsp, 16
+  iretq
+
 
 %macro isr_err_stub 1
 isr_stub_%+%1:
     mov rdi, %1
-    call _Z11general_isrh
+    mov rsi, rsp
+    call _Z18page_fault_handlerhP5Stack
     iretq
 %endmacro
 

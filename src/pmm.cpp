@@ -16,7 +16,7 @@ void init_pmm(struct limine_memmap_response* memmap_response) {
   uint64_t highest_address = 0;
   for(uint32_t entry = 0; entry < memmap_response->entry_count; entry++) {
     struct limine_memmap_entry* curr_entry = memmap_response->entries[entry];
-    if(curr_entry->type == LIMINE_MEMMAP_USABLE || curr_entry->type == LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE) {
+    if(curr_entry->type == LIMINE_MEMMAP_USABLE) {
       if(highest_address < (curr_entry->base + curr_entry->length)) {
         highest_address = curr_entry->base + curr_entry->length;
       }
@@ -26,7 +26,7 @@ void init_pmm(struct limine_memmap_response* memmap_response) {
   uint64_t needed_size = highest_address / 0x1000 / 8;
   for(uint64_t entry = 0; entry < memmap_response->entry_count; entry++) {
     struct limine_memmap_entry* curr_entry = memmap_response->entries[entry];
-    if(curr_entry->length >= needed_size && (curr_entry->type == LIMINE_MEMMAP_USABLE || curr_entry->type == LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE)) {
+  if(curr_entry->length >= needed_size && (curr_entry->type == LIMINE_MEMMAP_USABLE)) {
       page_frame_allocator_struct.bitmap = (uint8_t*)TO_HIGHER_HALF(curr_entry->base);
       page_frame_allocator_struct.bitmap_size = needed_size;
       page_frame_allocator_struct.entry = memmap_response;

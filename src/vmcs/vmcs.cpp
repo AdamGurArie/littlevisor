@@ -48,7 +48,7 @@ static uint32_t list_of_ports_to_intercept[] = {0x514, 0x518, 0x510, 0x511, 0x17
 //static uint32_t list_of_ports_to_intercept[] = {0x514, 0x518, 0x510, 0x511, 0x1f3};
 static uint64_t vmcb_addr = 0;
 static uint64_t host_state_area = 0;
-static context guests[10] = {};
+static context* guests = nullptr;
 static uint64_t guests_count = 0;
 static uint32_t curr_guest_idx = 0;
 static uint32_t quantom_counter = 0;
@@ -243,8 +243,16 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
   guests[guest_idx].guest_cr3 = vm_mem_map;
   guests[guest_idx].guest_asid = guest_idx;
 
-  storage_device* storage_dev = new virtual_storage_device(const_cast<const char*>("arch.iso"), 512);
-  guests[guest_idx].ata_device = new ata_pio_device(storage_dev);
+  storage_device* storage_dev = new virtual_storage_device(const_cast<const char*>("ubun.img"), 512);
+  if(storage_dev == nullptr) {
+    kpanic();
+  }
+
+  guests[guest_idx].ata_device = ata_pio_device(storage_dev);
+  //if(guests[guest_idx].ata_device == nullptr) {
+    //kpanic();
+  //}
+
   guests[guest_idx].cmos_dev = new cmos_device();
   
   uint32_t file_handle = vopenFile(codefile);
@@ -274,18 +282,6 @@ void init_guest_state(uint16_t guest_idx, const char* codefile) {
         GUEST_PHYSICAL_PAGE_FLAG,
         vm_mem_map
     );
-    
-
-    /*if((file_size - i * PAGE_SIZE) <= isa_bootloader_start) {
-      mapPage(
-          phys_page,
-          isa_bootloader_start + isa_curr, 
-          GUEST_PHYSICAL_PAGE_FLAG,
-          vm_mem_map
-      );
-
-      isa_curr -= PAGE_SIZE;
-    }*/
 
     uint32_t size_to_read = (file_size - size_read) > PAGE_SIZE ? PAGE_SIZE : (file_size - size_read);
     vreadFile(
@@ -417,6 +413,7 @@ void init_host() {
 
 void init_vm() {
   enable_svm();
+  guests = (context*)TO_HIGHER_HALF(kpalloc_contignious((sizeof(context) * 10 + PAGE_SIZE) / PAGE_SIZE));
   init_host();
   init_guest_state(1, "coreboot.rom");
   context_switching(0, 1);
@@ -448,6 +445,7 @@ void handle_ioio_vmexit() {
   // get the return value
   // return it to the destination register/address(if needed)
   // @TODO: add handling to REP prefix
+  //uint32_t fd = vopenFile("coreboot.rom");
   vmcb* vmcb_struct = (vmcb*)(TO_HIGHER_HALF(vmcb_addr));
   guest_regs* curr_guest_regs = &guests[curr_guest_idx].regs;
   uint64_t exitinfo1_val = vmcb_struct->control.exitinfo1;
@@ -493,7 +491,7 @@ void handle_ioio_vmexit() {
 
       for(uint64_t i = 0; i < rcx; i++) {
         
-        guests[curr_guest_idx].ata_device->dispatch_command(transaction, &response);
+        guests[curr_guest_idx].ata_device.dispatch_command(transaction, &response);
 
         kmemcpy((uint8_t*)target_addr, response.buffer, response.size);
         target_addr += response.size;

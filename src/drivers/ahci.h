@@ -64,7 +64,7 @@ struct hba_mem_regs {
   generic_host_control_struct generic_host_control; //44 bytes
   uint8_t reserved_1[116];
   uint8_t vendor_specific_registers[96];
-  port_register_struct port_registers[32];
+  port_register_struct port_registers[];
 } __attribute__((packed));
 
 struct command_header {
@@ -85,12 +85,12 @@ struct command_header {
 } __attribute__((packed));
 
 struct prdt {
-  uint8_t reserved_1 : 1;
-  uint32_t dba : 31;
+  // uint8_t reserved_1 : 1;
+  uint32_t dba;
   uint32_t dbau;
-  uint32_t reserved_2;
+  uint32_t reserved_1;
   uint32_t dbc : 22;
-  uint16_t reserved_3 : 9;
+  uint16_t reserved_2 : 9;
   uint8_t ioc : 1;
 } __attribute__((packed));
 
@@ -159,13 +159,14 @@ private:
   void init_ahci();
   void stop_command_engine(uint32_t port);
   void start_command_engine(uint32_t port);
-  bool find_avail_port(uint32_t& port);
+  bool find_avail_port(uint32_t* port);
 
 public: 
-  uint8_t read_sector(uint8_t* buff, uint64_t start_sector, uint16_t size);
-  uint8_t write_sector(uint8_t* buff, uint64_t start_sector, uint16_t size);
-  uint8_t read_data(uint8_t* buff, uint64_t offset, uint32_t size);
-  uint8_t write_data(uint8_t* buff, uint64_t offset, uint32_t size);
+  uint8_t read_sector(uint32_t sector, uint8_t* buff);
+  uint8_t write_sector(uint32_t sector, uint8_t* buff);
+  // @TODO: reads to much data and leads to out of bounds write into storage_dev in init_fs:30
+  uint8_t read_data(uint8_t* buff, uint32_t offset, uint32_t size);
+  uint8_t write_data(uint8_t* buff, uint32_t offset, uint32_t size);
   void commit_transaction(uint8_t* buff, uint64_t start_sector, uint16_t num_of_sectors, bool write);
   uint64_t get_sector_size();
   ahci();

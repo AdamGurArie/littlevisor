@@ -1,6 +1,7 @@
 #include "npaging.h"
 #include "../common.h"
 #include "../pmm.h"
+#include "paging.h"
 #include <cstdint>
 #include <bit>
 
@@ -24,6 +25,7 @@ void mapPage(uint64_t phys_addr, uint64_t virt_addr, uint16_t flags, uint64_t cr
     if((table->entries[indexes[i]] & 1) == 0) {
       uint64_t new_page = kpalloc();
       if(new_page == 0) {
+        kpanic();
         return;
       }
       
@@ -36,6 +38,10 @@ void mapPage(uint64_t phys_addr, uint64_t virt_addr, uint16_t flags, uint64_t cr
   }
 
   table->entries[indexes[3]] = phys_addr | flags;
+
+  // if(cr3 == cr3_val) {
+  asm volatile("invlpg (%0)" :: "r"(virt_addr) : "memory"); // @TODO: invalidate only when a translation is changed in a page table that is currently being used.
+  // }
 }
 
 uint64_t walkTable(uint64_t virt_addr, uint64_t cr3) {
@@ -63,7 +69,8 @@ uint64_t walkTable(uint64_t virt_addr, uint64_t cr3) {
 }
 
 void switch_pageMap(uint64_t cr3) {
-  asm volatile("movq %%cr3, %0" :: "r"(cr3));
+  asm volatile("movq %0, %%cr3" :: "r"(cr3));
+  cr3_val = cr3;
 }
 
 void create_linear_virtual_space(uint64_t size) {
@@ -89,6 +96,17 @@ void identity_map(uint64_t cr3, uint64_t start_addr, uint64_t num_of_pages, uint
         start_addr + i * 0x1000,
         start_addr + i * 0x1000,
         flags,
+        cr3
+    );
+  }
+}
+
+void map_range(uint64_t cr3, uint64_t virt_addr, uint64_t phys_addr, uint64_t num_of_pages, uint16_t flags) {
+  for(uint64_t i = 0; i < num_of_pages; i++) {
+    mapPage(
+        phys_addr + i * 0x1000,
+        virt_addr + i * 0x1000,
+        flags, 
         cr3
     );
   }

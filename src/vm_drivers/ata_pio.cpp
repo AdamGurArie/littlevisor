@@ -201,54 +201,64 @@ void ata_pio_device::handle_command(uint16_t command) {
     this->device_in_transfer = 1;
     this->transfer_type = READ_SECTORS;
     this->transfer_buff = (uint8_t*)kmalloc(this->registers.sec_count_reg * this->storage_dev->get_sector_size());
+    kmemset((uint8_t*)this->transfer_buff, 0x0, this->registers.sec_count_reg * this->storage_dev->get_sector_size());
     this->buff_offset = 0;
     this->size_remaining = this->registers.sec_count_reg * this->storage_dev->get_sector_size();
     this->handle_read_sectors();
     clearbit(&this->registers.status_reg, 0);
     setbit(&this->registers.status_reg, 6);
+    setbit(&this->registers.status_reg, 3);
 
   } else if(command == 0x30) {
     // write 28bit LBA
     this->device_in_transfer = 1;
     this->transfer_type = WRITE_SECTORS;
     this->transfer_buff = (uint8_t*)kmalloc(this->registers.sec_count_reg * this->storage_dev->get_sector_size());
+    kmemset((uint8_t*)this->transfer_buff, 0x0, this->registers.sec_count_reg * this->storage_dev->get_sector_size());
     this->buff_offset = 0;
     this->size_remaining = this->registers.sec_count_reg * this->storage_dev->get_sector_size();
     clearbit(&this->registers.status_reg, 0);
     setbit(&this->registers.status_reg, 6);
+    setbit(&this->registers.status_reg, 3);
 
   } else if(command == 0x24) {
     // read 48bit LBA
     this->device_in_transfer = 1;
     this->transfer_type = READ_SECTORS;
     this->transfer_buff = (uint8_t*)kmalloc(this->registers.sec_count_reg * this->storage_dev->get_sector_size());
+    kmemset((uint8_t*)this->transfer_buff, 0x0, this->registers.sec_count_reg * this->storage_dev->get_sector_size());
     this->buff_offset = 0;
     this->size_remaining = this->registers.sec_count_reg * this->storage_dev->get_sector_size();
     this->handle_read_sectors();
     clearbit(&this->registers.status_reg, 0);
     setbit(&this->registers.status_reg, 6);
+    setbit(&this->registers.status_reg, 3);
 
   } else if(command == 0x34) {
     // write 48bit LBA
     this->device_in_transfer = 1;
     this->transfer_type = WRITE_SECTORS;
     this->transfer_buff = (uint8_t*)kmalloc(this->registers.sec_count_reg * this->storage_dev->get_sector_size());
+    kmemset((uint8_t*)this->transfer_buff, 0x0, this->registers.sec_count_reg * this->storage_dev->get_sector_size());
     this->buff_offset = 0;
     this->size_remaining = this->registers.sec_count_reg * this->storage_dev->get_sector_size();
     this->handle_write_sectors();
     clearbit(&this->registers.status_reg, 0);
     setbit(&this->registers.status_reg, 6);
+    setbit(&this->registers.status_reg, 3);
 
   } else if(command == 0xEC) {
     // identify command
     this->device_in_transfer = 1;
     this->transfer_type = IDENTIFY_CMD;
     this->transfer_buff = (uint8_t*)kmalloc(512);
+    kmemset((uint8_t*)this->transfer_buff, 0x0, this->registers.sec_count_reg * this->storage_dev->get_sector_size());
     this->buff_offset = 0;
     this->size_remaining = 512;
     this->handle_identify_command();
     clearbit(&this->registers.status_reg, 0);
     setbit(&this->registers.status_reg, 6);
+    setbit(&this->registers.status_reg, 3);
 
   } else {
     setbit(&this->registers.status_reg, 0);
@@ -331,7 +341,7 @@ void ata_pio_device::handle_read_sectors() {
   uint32_t sector = this->registers.sec_num_reg;
   uint32_t sector_size = this->storage_dev->get_sector_size();
 
-  for(uint32_t i = 0; i < this->registers.sec_num_reg; i++) {
+  for(uint32_t i = 0; i <= this->registers.sec_num_reg; i++) {
     storage_dev->read_sector(sector + i, &this->transfer_buff[offset]);
     offset += sector_size;
   }

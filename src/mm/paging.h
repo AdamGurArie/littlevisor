@@ -15,7 +15,10 @@ enum paging_flags {
   PAT_FLAG = 0x400
 };
 
-void init_host_allocator();
+uint64_t init_vmm(struct limine_memmap_response* response, struct limine_file* kernel_file, struct limine_kernel_address_response* kernel_addr);
+uint64_t init_mappings(uint64_t memmap);
 void allocate_page(uint64_t* virt_addr, uint64_t* phys_addr, uint16_t flags);
+void map_kernel(uint64_t cr3);
 void map_host_page(uint64_t virt_addr, uint64_t phys_addr, uint16_t flags);
 uint64_t walk_host_tables(uint64_t virt_addr);
+uint64_t switch_host_pagemap(uint64_t new_pagemap);

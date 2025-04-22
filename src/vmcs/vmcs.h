@@ -161,7 +161,7 @@ struct context {
   guest_regs regs;
   uint64_t guest_cr3;
   uint32_t guest_asid;
-  ata_pio_device* ata_device;
+  ata_pio_device ata_device;
   cmos_device* cmos_dev;
 };
 

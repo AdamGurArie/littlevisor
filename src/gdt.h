@@ -9,6 +9,8 @@
 #define DATA32_DESC_SELECTOR 0x20
 #define CODE64_DESC_SELECTOR 0x28
 #define DATA64_DESC_SELECTOR 0x30
+#define CODE64_USER_DESC_SELECTOR 0x38
+#define DATA64_USER_DESC_SELECTOR 0x40
 
 struct gdt_entry {
   uint16_t limit_1;
@@ -18,6 +20,18 @@ struct gdt_entry {
   uint8_t limit_2 : 4;
   uint8_t flags : 4;
   uint8_t base_3;
+} __attribute__((packed));
+
+struct tss_entry {
+  uint16_t limit_1;
+  uint16_t base_1;
+  uint8_t base_2;
+  uint8_t access;
+  uint8_t limit_2 : 4;
+  uint8_t flags : 4;
+  uint8_t base_3;
+  uint32_t base_4;
+  uint32_t reserved;
 } __attribute__((packed));
 
 struct tss_s {
@@ -52,7 +66,7 @@ struct tss_s {
 
 struct gdt_table {
   gdt_entry table[9];
-  tss_s tss;
+  tss_entry tss_desc;
 } __attribute__((packed));
 
 struct gdtr_struct {
@@ -61,3 +75,7 @@ struct gdtr_struct {
 } __attribute__((packed));
 
 void init_gdt();
+
+void switch_tss_userstack(uint64_t new_stack);
+
+void switch_tss_kernelstack(uint64_t new_stack);

@@ -8,4 +8,5 @@ struct task_context_s {
   uint64_t mem_map;
   bool userland;
   bool alive;
+  uint64_t delay_ticks;
 };

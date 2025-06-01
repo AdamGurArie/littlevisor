@@ -102,7 +102,8 @@ void ahci::init_port(uint32_t port) {
   allocate_page(
       &cmd_list_addr_virt,
       &cmd_list_addr_phys,
-      PRESENT_FLAG | RW_FLAG | CACHE_DIS_FLAG | WRITE_THROUGH_FLAG
+      PRESENT_FLAG | RW_FLAG | CACHE_DIS_FLAG | WRITE_THROUGH_FLAG,
+      0
   );
 
   kmemset((uint8_t*)cmd_list_addr_virt, 0x0, 0x1000);
@@ -117,7 +118,8 @@ void ahci::init_port(uint32_t port) {
     allocate_page(
         &cmd_table_addr_virt,
         &cmd_table_addr_phys,
-        PRESENT_FLAG | RW_FLAG | CACHE_DIS_FLAG | WRITE_THROUGH_FLAG
+        PRESENT_FLAG | RW_FLAG | CACHE_DIS_FLAG | WRITE_THROUGH_FLAG,
+        0
     );
 
     kmemset((uint8_t*)cmd_table_addr_virt, 0x0, 0x1000);
@@ -131,7 +133,8 @@ void ahci::init_port(uint32_t port) {
   allocate_page(
       &fis_area_addr_virt,
       &fis_area_addr_phys,
-      PRESENT_FLAG | RW_FLAG | CACHE_DIS_FLAG | WRITE_THROUGH_FLAG
+      PRESENT_FLAG | RW_FLAG | CACHE_DIS_FLAG | WRITE_THROUGH_FLAG,
+      0
   );
 
   kmemset((uint8_t*)fis_area_addr_virt, 0x0, 0x1000);
@@ -393,15 +396,16 @@ uint8_t ahci::write_data(uint8_t* buff, uint32_t offset, uint32_t size) {
   uint8_t temp_buff[SECTOR_SIZE];
   kmemset(temp_buff, 0x0, SECTOR_SIZE);
   this->read_sector(curr_sector, temp_buff);
+  uint32_t size_to_copy = SECTOR_SIZE - offset_in_sector > size ? size : SECTOR_SIZE - offset_in_sector;
   kmemcpy(
       &temp_buff[offset_in_sector],
-      &buff[offset],
-      SECTOR_SIZE - offset_in_sector
+      buff,
+      size_to_copy
   );
 
   this->write_sector(curr_sector, temp_buff);
 
-  size_write += SECTOR_SIZE - offset_in_sector;
+  size_write += size_to_copy;
   curr_sector++;
 
   while(size - size_write > SECTOR_SIZE && size_write < size) {

@@ -8,7 +8,7 @@
 #include "../fs/vfs.h"
 #include "../common.h"
 
-#define ELF_MAGIC_SEQ 0x7f454C46
+#define ELF_MAGIC_SEQ 0x464C457F
 #define ELF_LINK_BASE_ADDR 0x10000
 
 #define PT_LOAD 0x1
@@ -19,7 +19,7 @@ uint64_t load_elf_to_memory(uint32_t elf_fd, uint64_t memmap) {
 
   uint32_t elf_magic_seq = ELF_MAGIC_SEQ;
 
-  if(!kmemcmp((uint8_t*)&elf_header, (uint8_t*)&elf_magic_seq, sizeof(uint32_t))) {
+  if(kmemcmp((uint8_t*)&elf_header.e_ident, (uint8_t*)&elf_magic_seq, sizeof(uint32_t))) {
     return 0x0;
   }
   

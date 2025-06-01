@@ -12,3 +12,5 @@ TASK_ID create_user_task(uint32_t elf_fd);
 void kill_task(TASK_ID task_id);
 uint64_t create_stack_frame(uint64_t mem_map, bool is_user);
 void round_robin(Stack* stack);
+void jump_to_userland(uint64_t next_task_idx);
+void delay_task(uint64_t ms, uint64_t stack);

@@ -21,9 +21,11 @@
 
 static BPB bpb_struct = {};
 static uint32_t first_data_sector = 0;
+static uint32_t number_of_clusters = 0;
 static ahci* storage_dev = 0;
 
 void encode_name(const char* name, char* encoded_name);
+uint32_t traverse_cluster_chain(uint32_t clust, uint32_t num_of_clusters);
 
 void init_fs(ahci* storage) {
   storage_dev = storage;
@@ -31,6 +33,7 @@ void init_fs(ahci* storage) {
   // uint32_t num_of_sectors = bpb_struct.large_sector_count;
   // uint32_t fat_size = bpb_struct.num_of_sectors_per_fat;
   first_data_sector = bpb_struct.num_of_reserved_sectors + (bpb_struct.num_of_fats * bpb_struct.fat32_extention.sectors_per_fat);
+  number_of_clusters = (bpb_struct.large_sector_count - first_data_sector) / bpb_struct.sectors_per_clusted;
   // uint32_t first_fat_sector = bpb_struct.num_of_reserved_sectors;
   // uint32_t num_of_data_sectors = num_of_sectors - (bpb_struct.num_of_reserved_sectors + fat_size * bpb_struct.num_of_fats);
 }
@@ -85,7 +88,7 @@ FILE_DESCRIPTOR findFile(const char* filename) {
   kmemset((uint8_t*)&fd, 0x0, sizeof(FILE_DESCRIPTOR));
   encode_name(filename, encoded_filename);
 
-  for(curr_clust = 2; curr_clust <= bpb_struct.large_sector_count; curr_clust++) {
+  for(curr_clust = 2; curr_clust <= number_of_clusters; curr_clust++) {
     for(uint32_t sector = 0; sector < bpb_struct.sectors_per_clusted; sector++) {
       uint32_t curr_sector_num = cluster_to_sector(curr_clust);
       uint8_t curr_sector[bpb_struct.bytes_per_sector];
@@ -107,17 +110,18 @@ FILE_DESCRIPTOR findFile(const char* filename) {
 
 void write_to_filedesc(char* filename, FILE_DESCRIPTOR fd) {
   uint32_t curr_clust = 2;
-  for(curr_clust = 2; curr_clust <= bpb_struct.large_sector_count; curr_clust++) {
+  for(curr_clust = 2; curr_clust < number_of_clusters; curr_clust++) {
     for(uint32_t sector = 0; sector < bpb_struct.sectors_per_clusted; sector++) {
-      uint32_t curr_sector_num = cluster_to_sector(curr_clust);
+      uint32_t curr_sector_num = cluster_to_sector(curr_clust) + sector;
       uint8_t curr_sector[bpb_struct.bytes_per_sector];
       storage_dev->read_data(curr_sector, curr_sector_num*SECTOR_SIZE, 1*SECTOR_SIZE);
 
       for(uint32_t offset = 0; offset < bpb_struct.bytes_per_sector; offset+=32) {
-        FILE_DESCRIPTOR* file_desc = (FILE_DESCRIPTOR*)(curr_sector + offset);
+        FILE_DESCRIPTOR* file_desc = std::bit_cast<FILE_DESCRIPTOR*>(curr_sector + offset);
         if(kmemcmp((uint8_t*)file_desc->filename, (uint8_t*)filename, 11) == 0) {
-          uint32_t position = (cluster_to_sector(curr_clust) + sector) * bpb_struct.bytes_per_sector + offset;
+          uint32_t position = curr_sector_num * bpb_struct.bytes_per_sector + offset;
           storage_dev->write_data((uint8_t*)&fd, position, sizeof(fd));
+          break;
         }
       }
     }
@@ -280,6 +284,18 @@ uint32_t get_last_cluster(uint32_t clust) {
   return last_clust;
 }
 
+uint32_t traverse_cluster_chain(uint32_t clust, uint32_t num_of_clusters) {
+  for(uint32_t i = 0; i < num_of_clusters; i++) {
+    clust = getEntryByCluster(clust);
+    if(clust >= 0x0FFFFFF8) {
+      break;
+    }
+
+  }
+
+  return clust;
+}
+
 void createFile(char* filename) {
   uint32_t curr_clust = bpb_struct.fat32_extention.fat_cluster_num_of_root;
   FILE_DESCRIPTOR free_fd;
@@ -317,7 +333,6 @@ void createFile(char* filename) {
 
 // TODO: add support for pos argument
 uint8_t writeFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
-  (void)pos;
   FILE_DESCRIPTOR fd = findFile(filename);
   FILE_DESCRIPTOR null_fd;
   kmemset((uint8_t*)&null_fd, 0x0, sizeof(FILE_DESCRIPTOR));
@@ -325,15 +340,20 @@ uint8_t writeFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
     return 0;
   }
   
+  uint32_t cluster_offset = pos / (bpb_struct.sectors_per_clusted * SECTOR_SIZE);
+  uint32_t in_cluster_offset = pos % (bpb_struct.sectors_per_clusted * SECTOR_SIZE);
+
   uint32_t offset = 0;
   uint32_t first_file_cluster = fd.first_clust_low | (fd.first_clust_high >> 16);
+  uint32_t write_cluster = traverse_cluster_chain(first_file_cluster, cluster_offset);
   uint32_t last_file_cluster = get_last_cluster(first_file_cluster);
   uint32_t remaining_size = size;
+
   if(fd.size_in_bytes % 512 != 0 || fd.size_in_bytes == 0) {
     // write in remaning cluster space
     uint32_t remaining_clust_size = (bpb_struct.bytes_per_sector*bpb_struct.sectors_per_clusted) - fd.size_in_bytes % 512;
     uint32_t size_to_write = size > remaining_clust_size ? remaining_clust_size : size;
-    uint32_t position = cluster_to_sector(last_file_cluster)*bpb_struct.bytes_per_sector + fd.size_in_bytes % 512; 
+    uint32_t position = cluster_to_sector(write_cluster)*bpb_struct.bytes_per_sector + in_cluster_offset; 
     storage_dev->write_data(buff, position, size_to_write);
     remaining_size -= size_to_write;
     offset += size_to_write;
@@ -341,16 +361,23 @@ uint8_t writeFile(char* filename, uint8_t* buff, uint32_t pos, uint32_t size) {
 
   // write rest of the file
   while(remaining_size > 0) {
-    uint32_t new_clust = allocate_cluster();
+    write_cluster = traverse_cluster_chain(write_cluster, 1);
+    if(write_cluster == last_file_cluster) {
+      write_cluster = allocate_cluster();
+      link_clusters(last_file_cluster, write_cluster);
+      last_file_cluster = write_cluster;
+    }
+
     uint32_t size_to_write = remaining_size > bpb_struct.bytes_per_sector*bpb_struct.sectors_per_clusted ? bpb_struct.bytes_per_sector*bpb_struct.sectors_per_clusted : remaining_size;
-    storage_dev->write_data(buff+offset, cluster_to_sector(new_clust), size_to_write);
-    link_clusters(last_file_cluster, new_clust);
-    last_file_cluster = new_clust;
+    storage_dev->write_data(buff+offset, cluster_to_sector(write_cluster), size_to_write);
     remaining_size -= size_to_write;
   }
 
-  fd.size_in_bytes = fd.size_in_bytes + size;
-  write_to_filedesc(filename, fd);
+  if(fd.size_in_bytes < (pos + size)) {
+    fd.size_in_bytes = fd.size_in_bytes + size;
+  }
+
+  write_to_filedesc(fd.filename, fd);
   return 0;
 }
 

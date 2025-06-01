@@ -26,7 +26,7 @@ void init_nvme() {
   uint64_t nvme_base_addr = (uint64_t)(((uint64_t)bar1 << 32) | (bar0 & 0xFFFFFFF0));
   uint64_t nvme_virt_addr = 0;
   uint64_t phys_addr = 0;
-  allocate_page(&nvme_virt_addr, &phys_addr, PRESENT_FLAG | RW_FLAG);
+  allocate_page(&nvme_virt_addr, &phys_addr, PRESENT_FLAG | RW_FLAG, 0);
   map_host_page(nvme_virt_addr, nvme_base_addr, PRESENT_FLAG | RW_FLAG); 
   nvme_bar = std::bit_cast<nvme_bar_s*>(nvme_virt_addr);
 

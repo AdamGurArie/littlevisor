@@ -3,9 +3,14 @@ bits 64
 extern _Z11general_isrh
 extern _Z18page_fault_handlerhP5Stack
 extern _Z11pit_handlerP5Stack
+extern _Z16dispatch_syscallmmmm
+extern _Z16jump_to_userlandmmmm
+
 global general_isr_tram
 global pagefault_handler_tram
 global isr_pit_handler
+global jump_to_userland_asm
+global syscall_tramp
 
 %macro pushAll 0
     push rax
@@ -44,7 +49,7 @@ global isr_pit_handler
 %endmacro
 
 general_isr_tram:
-  cld
+  cli
   
   pushAll
   
@@ -62,7 +67,7 @@ general_isr_tram:
 
 
 pagefault_handler_tram:
-  cld
+  cli
 
   pushAll
 
@@ -76,6 +81,7 @@ pagefault_handler_tram:
   popAll
 
   add rsp, 8
+  sti
 
   iretq
 
@@ -84,15 +90,50 @@ isr_pit_handler:
   push 32
   pushAll
   mov rdi, rsp
-  cld
+  cli
   call _Z11pit_handlerP5Stack
   mov al, 0x20
   out 0x20, al
   out 0xA0, al
   popAll
   add rsp, 16
+  sti
   iretq
 
+jump_to_userland_asm:
+  mov rax, rcx
+  mov rcx, rdi
+  mov rsp, rsi
+  mov r11, rdx
+  mov r10, 0x43
+  mov ds, r10
+  mov fs, r10
+  mov gs, r10
+  mov es, r10
+  ;mov r10, 0x40
+  ;mov ss, r10
+  sti
+  o64 sysret
+
+;userland_tramp:
+;  mov al, 0x20
+;  out 0x20, al 
+;  out 0x20, al 
+;  popAll 
+;  add rsp, 16
+;  iretq
+
+syscall_tramp:
+  sti
+  mov r12, rsp
+  mov r13, rcx
+  mov rcx, r8
+  call _Z16dispatch_syscallmmmm
+  mov rdi, r12
+  mov rsi, r13
+  mov rdx, r11
+  mov rcx, rax
+  call _Z16jump_to_userlandmmmm
 
 %macro isr_err_stub 1
 isr_stub_%+%1:

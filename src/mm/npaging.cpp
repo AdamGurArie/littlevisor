@@ -19,7 +19,9 @@ void mapPage(uint64_t phys_addr, uint64_t virt_addr, uint16_t flags, uint64_t cr
   indexes[2] = (virt_addr >> 21) & 0x1FF;
   indexes[3] = (virt_addr >> 12) & 0x1FF;
 
-  pagingLevel* table = std::bit_cast<pagingLevel*>(TO_HIGHER_HALF(cr3)); 
+  pagingLevel* table = std::bit_cast<pagingLevel*>(TO_HIGHER_HALF(cr3));
+
+  bool is_user = getbit(flags, 2);
   
   for(int i = 0; i < 3; i++) {
     if((table->entries[indexes[i]] & 1) == 0) {
@@ -33,6 +35,10 @@ void mapPage(uint64_t phys_addr, uint64_t virt_addr, uint16_t flags, uint64_t cr
       table->entries[indexes[i]] = new_page | flags;
       table = std::bit_cast<pagingLevel*>(TO_HIGHER_HALF((table->entries[indexes[i]] & ~0xFFF)));
     } else {
+      if(is_user) {
+        table->entries[indexes[i]] |= flags;
+      }
+
       table = std::bit_cast<pagingLevel*>(TO_HIGHER_HALF((table->entries[indexes[i]] & ~0xFFF)));
     }
   }

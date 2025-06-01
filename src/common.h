@@ -11,6 +11,9 @@
 #define TO_LOWER_HALF(addr) \
   (addr - 0xffff800000000000)
 
+#define KERNEL_TO_LOWER_HALF(addr) \
+  (addr - 0xffffffff00000000)
+
 struct Stack
 {
     uint64_t r15;
@@ -63,6 +66,8 @@ uint8_t kmemcmp(uint8_t* mem1, uint8_t* mem2, uint32_t size);
 uint32_t kstrlen(const char* str);
 int ktoupper(int c);
 
+//uint64_t kstrlen(const char* str);
+
 inline void clearbit(uint64_t* val, uint8_t pos) {
   *val = *val & ~((uint64_t)1 << pos);
 }
@@ -104,14 +109,14 @@ uint64_t kToLittleEndian(uint64_t value);
 inline uint64_t rdmsr(uint32_t msr) {
   uint32_t eax = 0;
   uint32_t edx = 0;
-  asm volatile("rdmsr" : "=d"(edx), "=a"(eax) : "c"(msr));
-  return ((uint64_t)edx >> 32) | eax;
+  asm volatile("rdmsr" : "=d"(edx), "=a"(eax) : "c"(msr) : "memory");
+  return ((uint64_t)edx << 32) | eax;
 }
 
 inline void wrmsr(uint32_t msr, uint64_t val) {
   uint32_t eax = val & 0xFFFFFFFF;
   uint32_t edx = (val >> 32) & 0xFFFFFFFF;
-  asm volatile("wrmsr" :: "d"(edx), "a"(eax), "c"(msr));
+  asm volatile("wrmsr" :: "d"(edx), "a"(eax), "c"(msr) : "memory");
 }
 
 inline void cpuid(uint32_t leaf, uint32_t& a, uint32_t& b, uint32_t& c, uint32_t& d) {
@@ -133,3 +138,5 @@ void operator delete(void* p, uint64_t param) noexcept;
 uint8_t read_from_port_byte(uint16_t port);
 uint16_t read_from_port_word(uint16_t port);
 uint32_t read_from_port_dword(uint16_t port);
+
+void itoa(long value, char* buffer);

@@ -38,6 +38,14 @@ void print_to_serial(uint8_t* text, int size) {
   }
 }
 
+/*uint64_t strlen(const char *str) {
+    const char *s = str;
+    while (*s) {
+        s++;
+    }
+    return s - str;
+}*/
+
 //void setbit(uint64_t* val, uint8_t pos) {
 //  *val = *val | ((uint64_t)1 << pos);
 //}
@@ -125,4 +133,49 @@ void operator delete(void* p) noexcept {
 void operator delete(void* p, uint64_t param) noexcept {
   (void)param;
   kfree(p);
+}
+
+void swap(char *x, char *y){
+    char t = *x; *x = *y; *y = t;
+}
+
+char* reverse(char *buffer, int i, int j)
+{
+    while (i < j) {
+        swap(&buffer[i++], &buffer[j--]);
+    }
+ 
+    return buffer;
+}
+
+void itoa(long value, char* buffer){
+    uint64_t n = value;
+ 
+    uint64_t i = 0;
+    while (n)
+    {
+        uint64_t r = n % 10;
+ 
+        if (r >= 10) {
+            buffer[i++] = 65 + (r - 10);
+        }
+        else {
+            buffer[i++] = 48 + r;
+        }
+ 
+        n = n / 10;
+    }
+ 
+
+    if (i == 0) {
+        buffer[i++] = '0';
+    }
+
+    if (value < 0 && 10 == 10) {
+        buffer[i++] = '-';
+    }
+ 
+    buffer[i] = '\0';
+ 
+    reverse(buffer, 0, i - 1);
 }

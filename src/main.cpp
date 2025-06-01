@@ -1,3 +1,4 @@
+#include "drivers/ps2.h"
 #include "drivers/ram_disk.h"
 #include "drivers/storage_device.h"
 #include "fs/fat32.h"
@@ -6,6 +7,7 @@
 #include  "limine.h"
 #include "common.h"
 #include "mm/npaging.h"
+#include "terminal.h"
 #include "vmcs/vmcs.h"
 #include "drivers/acpi.h"
 #include "drivers/pci.h"
@@ -22,9 +24,12 @@
 #include "timers/pit.h"
 #include "scheduler/scheduler.h"
 #include "elf/elfloader.h"
+#include "userspace/syscalls.h"
 
 // @TODO: the name encoding algorithm of fat32 doesn't work with test.elf for example, fix that
 // @TODO: check why placing elf_hdr elf_header{0} gives a crash
+
+//@TODO: handle the case where the elf doesn't get loaded and return 0, check if appending to the end of a file works
 
 __attribute__((used, section(".requests")))
 static volatile LIMINE_BASE_REVISION(2);
@@ -66,6 +71,13 @@ static volatile struct limine_kernel_file_request kernel_file_request {
   .response = 0,
 };
 
+__attribute__((used, section(".requests")))
+static volatile struct limine_framebuffer_request framebuffer_req {
+  .id = LIMINE_FRAMEBUFFER_REQUEST,
+  .revision = 0,
+  .response = 0,
+};
+
 __attribute__((used, section(".requests_start_marker")))
 static volatile LIMINE_REQUESTS_START_MARKER;
 
@@ -87,12 +99,19 @@ void _start() {
   // while(true) {
   //   asm volatile("out %0, $0xE9" :: "a"('a'));
   // }
-
+ 
+  init_heap();
+  init_terminal(framebuffer_req.response->framebuffers[0]);
+  const char msg[] = "Hello world!";
+  terminal_puts(msg);
+  init_vmm(memmap_req.response, kernel_file_request.response->kernel_file, kernel_addr_request.response);
   init_acpi((uint64_t)rsdp_request.response->address);
+
   MCFG* mcfg = get_mcfg();
   init_pci((uint64_t)mcfg);
-  init_heap();
-  init_vmm(memmap_req.response, kernel_file_request.response->kernel_file, kernel_addr_request.response);
+  terminal_puts(msg);
+  //init_terminal(framebuffer_req.response->framebuffers[0]);
+
   // init_vmm(memmap_req.response, kernel_file_request.response->kernel_file, kernel_addr_request.response);
   uint64_t virt_addr = get_host_pageMap();
   uint64_t phys_addr = kpalloc();
@@ -111,6 +130,7 @@ void _start() {
   uint8_t buff[512] = {0};
   kmemset(buff, 0x45, 512);
   ahci ahci_dev = ahci();
+  ahci_dev.read_sector(0x18999, buff);
   //ahci_dev.write_sector(0, buff);
   //ahci_dev.write_sector(1, buff);
   //ahci_dev.write_sector(2, buff);
@@ -129,8 +149,35 @@ void _start() {
   ramDisk* ramdisk = new ramDisk((uintptr_t)limine_f->address, limine_f->size);
   init_fs(&ahci_dev);
 
+  //init_ps2_controller();
+  
+  terminal_puts("before sleep");
+  sleep(5000);
+  terminal_puts("after sleep");
   uint32_t test_fd = vopenFile("test.elf");
-  create_user_task(test_fd);
+  //uint8_t a = *((uint8_t*)0x1);
+  //(void)a;
+  init_syscalls();
+  if(create_user_task(test_fd) == 0) {
+    int counter = 0;
+    terminal_puts("\033[2J");
+    terminal_flush();
+    terminal_refresh();
+    terminal_puts("\033[1;1H");
+    while (true) {
+      char number[30];
+      itoa(counter, number);
+      terminal_puts(number);
+      //terminal_puts("\n");
+      sleep(1000);
+      counter++;
+      terminal_flush();
+      terminal_refresh();
+      terminal_puts("\033[2J");
+      terminal_puts("\033[1;1H");
+    }
+    //kpanic(); // failed to create init task
+  }
   init_scheduler();
   //uint64_t entry = load_elf_to_memory(test_fd, 0);
   //void (*elf)() = (void(*)())entry;

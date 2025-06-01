@@ -2,6 +2,7 @@
 #include "common.h"
 #include <cstdint>
 #include "gdt.h"
+#include "terminal.h"
 
 #define PIC1_DATA 0x21
 #define PIC1_CMD 0x20
@@ -44,7 +45,7 @@ void init_idt_entry(uint16_t vector, uint64_t isr_addr, uint8_t dpl, uint8_t ist
 
 void loadidt() {
   struct idtr_reg idtr {
-    .limit = sizeof(idt_entry)*256,
+    .limit = sizeof(idt_entry)*256 - 1,
     .base_addr = (uint64_t)&idt_table,
   };
 
@@ -60,7 +61,7 @@ void init_idt() {
   //   init_idtentry(i, (uint64_t)general_isr_tram, 0, 0, 0xF);
   // }
 
-  init_idt_entry(0xE, (uint64_t)pagefault_handler_tram, 0, 0, 0xF);
+  init_idt_entry(0xE, (uint64_t)isr_stub_table[0xE], 0, 0, 0xF);
   //init_idt_entry(0x20, (uint64_t)isr_pit_handler, 0, 0, 0xE);
   //init_idtentry(0xD, (uint64_t)page_fault_handler, 0, 0, 0xF);
   //init_idtentry(0x6, (uint64_t)page_fault_handler, 0, 0, 0xF);
@@ -81,6 +82,7 @@ void general_isr(uint8_t isr_vector) {
 void page_fault_handler(uint8_t isr_vector, Stack* stack) {
   // read cr2
   (void)stack;
+  terminal_puts("\nKERNEL PANIC! page fault}");
   // uint64_t fault_address = 0;
   // asm volatile("mov %0, %%cr2" : "=r"(fault_address));
   // if(fault_address > 0x1F7 && fault_address < (0x1FE)) {
